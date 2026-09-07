@@ -1,8 +1,15 @@
 name: ci
 
 on:
+  # PR では pull_request だけで回す。push でも回すと同じコミットで二重に走る。
   push:
+    branches: [main]
   pull_request:
+
+# 同じブランチに続けてプッシュしたら、古い実行を打ち切る。
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:

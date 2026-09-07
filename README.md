@@ -223,5 +223,13 @@ CV 信頼性の閾値、的中率の上限を変えられる。
 ## テスト
 
 ```bash
-python3 -m pytest tools/tests/ -q
+python3 -m pytest -q
 ```
+
+CI（`.github/workflows/ci.yml`）は pytest に加えて、pyflakes、
+**スキルの例文と linter の判定の一致**、同梱設定の読み込み、
+hook の終了コードを確認する。
+
+規範を触ったときに壊れやすいのは「スキルの例文と linter の一致」。
+ここがずれると、エージェントは文書に従って書いて linter に落とされ続け、
+やがて抜け道を探し始める。
