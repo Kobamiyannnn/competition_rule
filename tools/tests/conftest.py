@@ -40,15 +40,31 @@ def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         encoding="utf-8",
     )
     (tmp_path / "ideas" / "backlog.yaml").write_text(
-        yaml.safe_dump({"ideas": [
-            {"id": f"i{n:04d}", "action": "x", "axes": ["features"], "tier": "explore",
-             "expected": {"metric": "cv.mean", "direction": "increase", "magnitude": 0.003},
-             "evidence": "priors", "cost": 1.0, "status": "open"}
-            for n in range(1, 4)
-        ]}, allow_unicode=True),
-        encoding="utf-8",
-    )
+        yaml.safe_dump({"ideas": valid_ideas(3)}, allow_unicode=True), encoding="utf-8")
     return tmp_path
+
+
+# 検証を通る在庫。軸が散っていないと backlog.too_narrow に落ちるので、
+# 既定の軸から順に割り当てる。
+_IDEA_AXES = ["features", "hyperparameters", "ensemble", "validation", "metric_fidelity"]
+
+
+def valid_ideas(n: int) -> list[dict]:
+    return [
+        {
+            "id": f"i{k:04d}",
+            "created_at": "2026-09-07T12:00:00+09:00",
+            "action": f"ユーザ単位の集約特徴を {k} 種類の統計量で作り、"
+                      "既存の特徴集合に足して比較する。",
+            "axes": [_IDEA_AXES[(k - 1) % len(_IDEA_AXES)]],
+            "tier": "explore",
+            "expected": {"metric": "cv.mean", "direction": "increase", "magnitude": 0.003},
+            "evidence": "priors/tabular.md#t03",
+            "cost": 1.0,
+            "status": "open",
+        }
+        for k in range(1, n + 1)
+    ]
 
 
 def make_experiment(

@@ -34,6 +34,8 @@ def _kind(path: Path) -> str | None:
         return "record"
     if path.suffix in (".yaml", ".yml") and path.parent.name == "decisions":
         return "decision"
+    if path.name == "backlog.yaml" and path.parent.name == "ideas":
+        return "backlog"
     return None
 
 
@@ -56,7 +58,7 @@ def post(payload: dict) -> int:
     if path is None:
         return 0
     kind = _kind(path)
-    if kind not in ("record", "decision"):
+    if kind not in ("record", "decision", "backlog"):
         return 0
     if not path.exists():
         return 0
@@ -89,12 +91,24 @@ def post(payload: dict) -> int:
         return 0
 
     sys.stderr.write(buf.getvalue())
-    sys.stderr.write(
-        "\nこの記録は規範を通っていない。上の指摘を直してから次に進む。\n"
-        "語彙規則だけは lint_waived に規則名と20字以上の理由を書けば抜けられる。\n"
-        "反証条件・改竄検知・スキーマは抜けられない。\n"
-        "反証条件が書けない考えは、hypothesis の要素ごと消すのが正しい対処。\n"
-    )
+    if kind == "backlog":
+        sys.stderr.write(
+            "\nこのアイデアは在庫として数えられない。"
+            " 在庫の下限は「打ち手がない」と言わせないための仕組みなので、"
+            "中身の薄い項目を数に入れない。\n"
+            "  - action は1実験の粒度まで割る（20字以上）\n"
+            "  - evidence は出典を指す"
+            "（priors/common.md#c01 / exp0003 / dec0002 / URL）\n"
+            "  - expected.magnitude と cost は数値で書く\n"
+            "`tools/expctl idea add` を使うと、入れる前に検証がかかる。\n"
+        )
+    else:
+        sys.stderr.write(
+            "\nこの記録は規範を通っていない。上の指摘を直してから次に進む。\n"
+            "語彙規則だけは lint_waived に規則名と20字以上の理由を書けば抜けられる。\n"
+            "反証条件・改竄検知・スキーマは抜けられない。\n"
+            "反証条件が書けない考えは、hypothesis の要素ごと消すのが正しい対処。\n"
+        )
     return 2
 
 

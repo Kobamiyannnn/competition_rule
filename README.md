@@ -34,7 +34,7 @@
 | 数値と記述の分離 | `metrics.json` は機械しか書かない。sha256 で守り、手で編集すると lint が落ちる |
 | 数値への接地 | 記述欄に裸の数値を書けない。`${metrics.cv.mean}` で参照する。転記ミスと誇張が同時に消える |
 | 字数上限 | `observation` は300字、`change` は200字。比喩を書く余白を物理的に奪う |
-| 禁止語彙 | ヘッジ・比喩・擬人化・評価語・空句・曖昧な量的表現を機械検出（155パターン） |
+| 禁止語彙 | ヘッジ・比喩・擬人化・評価語・空句・曖昧な量的表現を機械検出（146パターン） |
 | **反証条件の必須化** | `hypothesis` には `falsification` が必須。書けない考えは記録に入れない |
 | レポートの機械生成 | 本文は records から組み立てる。人が書けるのは600字の結論だけ |
 
@@ -51,7 +51,7 @@
 | CV 信頼性の台帳 | CV-LB の順位相関を機械集計。`calibrated` になるまで CV を根拠に打ち切れない |
 | ノイズ幅の強制 | 差が `lb_noise`（CV なら fold の標準誤差）未満なら `miss` ではなく `inconclusive` |
 | 探索の網羅マップ | 12 軸。未着手の軸が残っている限り「打ち手がない」と書けない |
-| アイデア在庫 | 未実行が下限（既定8件）を割ると次の実験に進めない |
+| アイデア在庫 | 未実行が下限（既定8件）を割ると次の実験に進めない。**数えるのは検証を通った項目だけ** |
 | tier クォータ | `exploit`/`explore`/`moonshot` の比率を phase ごとに強制 |
 | **飽和判定** | 試し尽くした軸への `exploit` を**禁止**する。チューニングの無限沼を塞ぐ |
 | 較正の追跡 | 期待と実際を突き合わせる。**的中率が高すぎると警告が出る**（＝賭けていない） |
@@ -161,7 +161,7 @@ tools/
   expkit/                  lint・ゲート・状態集計・レポート生成
   hooks/guard.py           記録の lint 強制と metrics.json の保護
   hooks/session.py         引き継ぎの注入と compact 前の点検
-  tests/                   67件
+  tests/                   87件
 templates/
   experiment_runner.py     実験スクリプトの雛形
   CLAUDE.md                作業規範の雛形
@@ -178,11 +178,29 @@ templates/
 | `expctl decide new/close` | 決定の作成と機械的な答え合わせ |
 | `expctl saturate <axis>` | 軸を飽和（または打ち切り）として宣言 |
 | `expctl idea list` | 在庫を gain/cost 順に並べる |
+| `expctl idea add` | 在庫に足す。検証を通らないと入らない |
+| `expctl idea retire` | 在庫から捨てる。20字以上の理由が要る |
 | `expctl lb <exp>` | LB スコアを差す（手入力として provenance に残る） |
 | `expctl cvlb` | CV-LB 対応表と信頼性判定を更新 |
 | `expctl table` | 実験一覧を metrics から生成 |
 | `expctl render <exp>` | `${...}` を実値に置いて記録を読む |
 | `expctl report` | レポートを組み立てる |
+
+## 在庫を数だけで満たせないようにする仕組み
+
+在庫の下限は「打ち手がない」と言わせないための仕組みなので、
+中身の薄い項目を8件並べて満たされると形骸化する。だから3点を機械で見る。
+
+| 規則 | 中身 |
+|---|---|
+| `idea.action_too_vague` | `action` が20字未満は1実験の粒度になっていない |
+| `idea.evidence_without_source` | `evidence` が出典を指すこと（`priors/common.md#c01` / `exp0003` / `dec0002` / URL） |
+| `backlog.too_narrow` | 在庫が3軸以上に散っていること。同じ発想の変奏で埋めさせない |
+
+そして**ゲートが数えるのは検証を通った項目だけ**。落ちた項目は在庫として数えない。
+逆向きの穴も塞いである。中身の無い在庫を口実に打ち切りを止め続けることもできない。
+
+捨てるときは `expctl idea retire <id> --reason ...` で20字以上の理由が要る。
 
 ## 抜け道について
 

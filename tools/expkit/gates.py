@@ -16,6 +16,7 @@ from .state import Experiment, State, spearman
 
 DEFAULT_POLICY = {
     "backlog_min_open": 8,
+    "backlog_min_axes": 3,         # 在庫が何軸に散っている必要があるか
     "tier_window": 10,
     "tier_quota_tolerance": 0.15,
     "cv_trust_min_pairs": 3,
@@ -164,18 +165,62 @@ def gate_new_experiment(state: State, *, tier: str, axes: list[str]) -> list[Gat
     return out
 
 
+def valid_open_ideas(state: State) -> tuple[list[dict], list[dict]]:
+    """検証を通った未実行のアイデアと、落ちたものを返す。
+
+    在庫の下限を数だけで満たされると仕組みが形骸化するので、
+    ゲートが数えるのは検証を通ったものだけにする。
+    """
+    from .config import load_lint_config
+    from .lint import lint_idea
+
+    cfg = load_lint_config(state.root)
+    good: list[dict] = []
+    bad: list[dict] = []
+    for n, idea in enumerate(state.ideas):
+        if not isinstance(idea, dict) or (idea.get("status") or "open") != "open":
+            continue
+        report = lint_idea(
+            idea, cfg=cfg, index=n, known_axes=state.axis_ids,
+            known_experiments=state.experiment_ids,
+        )
+        (bad if report.errors else good).append(idea)
+    return good, bad
+
+
 def gate_backlog(state: State) -> list[GateFinding]:
     pol = policy(state)
-    n = len(state.open_ideas())
     minimum = int(pol["backlog_min_open"])
-    if n < minimum:
-        return [GateFinding(
+    good, bad = valid_open_ideas(state)
+    out: list[GateFinding] = []
+
+    if bad:
+        ids = ", ".join(str(i.get("id") or "?") for i in bad[:6])
+        out.append(GateFinding(
+            gate="backlog.invalid_entries", severity="error",
+            message=f"検証を通らないアイデアが {len(bad)} 件あり、在庫として数えていない: {ids}。"
+                    " `tools/expctl lint backlog` で理由を見る。",
+        ))
+
+    if len(good) < minimum:
+        out.append(GateFinding(
             gate="backlog.thin", severity="error",
-            message=f"未実行のアイデアが {n} 件。下限 {minimum} 件。"
+            message=f"検証を通った未実行のアイデアが {len(good)} 件。下限 {minimum} 件。"
                     " 次の実験に進む前に ideas/backlog.yaml を補充する。"
                     " 補充源は knowledge/priors/、公開解法、未着手の軸。",
-        )]
-    return []
+        ))
+
+    # 在庫全体の広がり。同じ発想の変奏で埋めさせない。
+    min_axes = int(pol["backlog_min_axes"])
+    axes = {a for i in good for a in (i.get("axes") or [])}
+    if len(good) >= minimum and len(axes) < min_axes:
+        out.append(GateFinding(
+            gate="backlog.too_narrow", severity="error",
+            message=f"在庫が {len(axes)} 軸にしか散っていない（下限 {min_axes} 軸）。"
+                    " 別種の打ち手を足す。未着手の軸: "
+                    + (", ".join(state.untouched_axes()[:6]) or "なし"),
+        ))
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -217,13 +262,15 @@ def gate_stop_decision(state: State) -> list[GateFinding]:
                     " 飽和判定を coverage.yaml に書くか、実験を続ける。",
         ))
 
-    n_open = len(state.open_ideas())
-    if n_open:
+    good, _bad = valid_open_ideas(state)
+    if good:
+        ids = ", ".join(str(i.get("id") or "?") for i in good[:6])
         out.append(GateFinding(
             gate="stop.backlog_not_empty", severity="error",
-            message=f"未実行のアイデアが {n_open} 件ある。"
+            message=f"未実行のアイデアが {len(good)} 件ある（{ids}）。"
                     " 在庫が空でない限り「打ち手がない」とは書けない。"
-                    " 捨てるなら1件ずつ retired にして理由を残す。",
+                    " 捨てるなら1件ずつ `expctl idea retire <id> --reason ...` で"
+                    " 理由を残す。",
         ))
 
     return out

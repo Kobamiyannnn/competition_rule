@@ -43,6 +43,27 @@ tools/expctl idea list
 3. 公開解法・ディスカッション・過去の類似コンペ
 4. **未決着の仮説の反証条件** — そのまま実験の手順になる
 
+補充は `expctl idea add` で行う。入れる前に検証がかかる。
+
+```
+tools/expctl idea add \
+  --action "adversarial validation で train と test の分布差を測り、判別に効く列を落とす。" \
+  --axes validation --tier explore --magnitude 0.002 \
+  --evidence "priors/common.md#c04" --cost 0.8
+```
+
+検証は3点を見る。**数だけ揃えても在庫として数えられない。**
+
+- `action` が20字以上で、1実験の粒度まで割れていること
+- `evidence` が出典を指すこと（`priors/common.md#c01` / `exp0003` / `dec0002` / URL）
+- 在庫全体が3軸以上に散っていること（同じ発想の変奏で埋めない）
+
+捨てるときも理由が要る。
+
+```
+tools/expctl idea retire i0004 --reason "i0003 と同じ集約を別の統計量で作るだけで、独立した検証にならない。"
+```
+
 ### 3. 決定を書く
 
 ```

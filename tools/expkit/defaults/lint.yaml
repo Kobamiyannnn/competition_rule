@@ -17,6 +17,7 @@ limits:
   decision.options.action: 150
   decision.rationale.reason: 200
   decision.outcome.note: 100
+  idea.action: 150
   report.conclusion: 600
 
 # ---------------------------------------------------------------------------
@@ -49,6 +50,8 @@ field_profiles:
   decision.options.action: strict
   decision.rationale.reason: interpretive
   decision.outcome.note: strict
+  # アイデアは「何をするか」なので事実記述。良し悪しは expected が持つ。
+  idea.action: strict
   report.conclusion: strict
 
 # ---------------------------------------------------------------------------
@@ -258,6 +261,7 @@ structure:
     - record.hypothesis.falsification
     - decision.options.action
     - decision.question
+    - idea.action
 
   # falsification が条件文の形になっているかの検査。
   # 条件節マーカーと観測可能マーカーの両方を含まないと error。
@@ -270,6 +274,20 @@ structure:
     - れば
     - '\bif\b'
     - '\bwhen\b'
+  # アイデア在庫がゲートを数だけで満たされるのを防ぐ規則。
+  #
+  # 在庫の下限は「打ち手がない」と言わせないための仕組みなので、
+  # 中身の薄い項目で埋められると形骸化する。そこで次の3点を機械で見る。
+  #   1. action が短すぎない（「特徴量を追加」では1実験の粒度になっていない）
+  #   2. evidence が出典を指している（priors / 実験ID / URL のいずれか）
+  #   3. 在庫全体が複数の軸にまたがっている（同じ発想の変奏で埋めさせない）
+  idea_action_min_chars: 20
+  idea_evidence_patterns:
+    - 'priors/[\w./-]+#\w+'      # 事前知識ライブラリの項目
+    - '\bexp\d{4}\b'            # このコンペで観測された実験
+    - '\bdec\d{4}\b'            # 過去の決定
+    - 'https?://'                 # 外部の出典
+
   falsification_observable_markers:
     - '\$\{'
     - '\d'

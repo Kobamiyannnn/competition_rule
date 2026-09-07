@@ -60,10 +60,23 @@ URL があるなら公式ページと規約を読みに行く。読めたなら�
 `knowledge/priors/README.md` と `common.md`、データ形式に対応するファイルを読み、
 `policy.backlog_min_open`（既定8件）以上を `ideas/backlog.yaml` に写す。
 
+`ideas/backlog.yaml` を手で書くより `expctl idea add` を使う。
+入れる前に検証がかかるので、通らない項目が在庫に混ざらない。
+
+```
+tools/expctl idea add \
+  --action "ユーザ単位の集約特徴（購入額の mean / std / count）を12列作り、既存の特徴集合に足す。" \
+  --axes features --tier explore --magnitude 0.003 \
+  --evidence "priors/tabular.md#t03" --cost 1.0
+```
+
 写すときの規則。
 
 - `evidence` には出典を書く。priors 由来なら `priors/common.md#c01` の形。
+  出典を指していないと検証に落ちる。
   **このコンペで観測されたことと混ぜない**（まだ何も観測していない）。
+- **軸を散らす。** 在庫が3軸未満だとゲートが通らない。
+  同じ発想の変奏で8件揃えても、打ち手を持っていることにはならない。
 - `expected.magnitude` は、このコンペの指標のスケールに直した数値で書く。
   priors の「大きい/中程度」をそのまま書き写さない。
 - `cost` は 1.0 を標準的な1実験として相対で書く。

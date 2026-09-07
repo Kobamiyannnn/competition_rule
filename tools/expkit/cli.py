@@ -17,6 +17,7 @@ from . import metrics as metrics_mod
 from .config import load_lint_config
 from .gates import (
     calibration,
+    policy,
     conservatism_findings,
     current_phase,
     cv_trust,
@@ -25,7 +26,7 @@ from .gates import (
     gate_stop_decision,
     judge,
 )
-from .lint import lint_decision, lint_record
+from .lint import lint_backlog, lint_decision, lint_idea, lint_record
 from .paths import (
     decision_path,
     decisions_dir,
@@ -35,7 +36,7 @@ from .paths import (
     repo_root,
 )
 from .schema import decision_template, record_template
-from .state import Experiment, load_state
+from .state import Experiment, State, load_state
 
 BOLD, DIM, RESET = "\033[1m", "\033[2m", "\033[0m"
 
@@ -129,6 +130,9 @@ def cmd_new(args: argparse.Namespace) -> int:
 
     path.write_text(text, encoding="utf-8")
 
+    if args.idea:
+        _mark_idea(root, args.idea, status="running", experiment=exp_id)
+
     print(f"{path} を作った。")
     print("次にやること: 実験スクリプトから expkit.metrics.write で metrics.json を書き、")
     print(f"              record.yaml の記述欄を埋め、`expctl lint {exp_id}` を通す。")
@@ -162,6 +166,14 @@ def cmd_lint(args: argparse.Namespace) -> int:
             known_experiments=exp_ids, known_hypotheses=hyp_ids,
         ))
 
+    def lint_the_backlog() -> None:
+        per_idea, whole = lint_backlog(
+            state.backlog, cfg=cfg, policy=policy(state),
+            known_axes=axis_ids, known_experiments=exp_ids,
+        )
+        reports.extend(per_idea)
+        reports.append(whole)
+
     if targets:
         for t in targets:
             # ファイルパスでも ID でも受ける（hook から呼ぶため）
@@ -177,11 +189,17 @@ def cmd_lint(args: argparse.Namespace) -> int:
                 if resolved.parent.name == "decisions":
                     lint_one_decision(_load_yaml(resolved), resolved.stem)
                     continue
+                if resolved.parent.name == "ideas":
+                    lint_the_backlog()
+                    continue
                 print(f"{t}: 記録でも決定でもないので検査しない。")
                 continue
             e = next((x for x in state.experiments if x.id == t), None)
             if e:
                 lint_one_experiment(e)
+                continue
+            if t in ("backlog", "ideas"):
+                lint_the_backlog()
                 continue
             dp = decision_path(t, root)
             if dp.exists():
@@ -192,8 +210,10 @@ def cmd_lint(args: argparse.Namespace) -> int:
     else:
         for e in state.experiments:
             lint_one_experiment(e)
-        for f in sorted(decisions_dir(root).glob("*.yaml")) if decisions_dir(root).exists() else []:
-            lint_one_decision(_load_yaml(f), f.stem)
+        if decisions_dir(root).exists():
+            for f in sorted(decisions_dir(root).glob("*.yaml")):
+                lint_one_decision(_load_yaml(f), f.stem)
+        lint_the_backlog()
 
     if not reports:
         print("検査対象が無い。")
@@ -445,6 +465,107 @@ def cmd_saturate(args: argparse.Namespace) -> int:
     return 0
 
 
+def _backlog_path(root: Path) -> Path:
+    return root / "ideas" / "backlog.yaml"
+
+
+def _load_backlog(root: Path) -> dict:
+    path = _backlog_path(root)
+    return _load_yaml(path) if path.exists() else {"ideas": []}
+
+
+def cmd_idea_add(args: argparse.Namespace) -> int:
+    root = repo_root()
+    state = load_state(root)
+    cfg = load_lint_config(root)
+
+    axes = [a.strip() for a in args.axes.split(",") if a.strip()]
+    idea = {
+        "id": args.id or _next_id_in_backlog(state),
+        "created_at": _now(),
+        "action": args.action,
+        "axes": axes,
+        "tier": args.tier,
+        "expected": {
+            "metric": args.metric,
+            "direction": args.direction,
+            "magnitude": float(args.magnitude),
+        },
+        "evidence": args.evidence,
+        "cost": float(args.cost),
+        "status": "open",
+        "source": args.source,
+        "experiment": None,
+        "retired_reason": None,
+    }
+
+    report = lint_idea(idea, cfg=cfg, index=0, known_axes=state.axis_ids,
+                       known_experiments=state.experiment_ids)
+    if report.errors:
+        print(report.format())
+        print("\n在庫に入れなかった。在庫の下限は「打ち手がない」と言わせないための"
+              "仕組みなので、中身の薄い項目を数に入れない。", file=sys.stderr)
+        return 1
+
+    backlog = _load_backlog(root)
+    backlog.setdefault("ideas", []).append(idea)
+    _backlog_path(root).parent.mkdir(parents=True, exist_ok=True)
+    _dump_yaml(_backlog_path(root), backlog)
+    print(f"{idea['id']} を在庫に入れた。")
+    return 0
+
+
+def _next_id_in_backlog(state: State) -> str:
+    n = 0
+    for i in state.ideas:
+        ident = str(i.get("id") or "") if isinstance(i, dict) else ""
+        if ident.startswith("i") and ident[1:].isdigit():
+            n = max(n, int(ident[1:]))
+    return f"i{n + 1:04d}"
+
+
+def cmd_idea_retire(args: argparse.Namespace) -> int:
+    root = repo_root()
+    backlog = _load_backlog(root)
+    idea = next((i for i in backlog.get("ideas") or []
+                 if isinstance(i, dict) and i.get("id") == args.idea), None)
+    if idea is None:
+        print(f"{args.idea} が在庫に無い。", file=sys.stderr)
+        return 2
+
+    reason = args.reason.strip()
+    if len(reason) < 20:
+        print("捨てる理由が20字未満。理由なく捨てられると、在庫の下限は意味を失う。",
+              file=sys.stderr)
+        return 1
+
+    idea["status"] = "retired"
+    idea["retired_reason"] = reason
+    _dump_yaml(_backlog_path(root), backlog)
+    print(f"{args.idea} を retired にした。")
+
+    findings = gate_backlog(load_state(root))
+    if _print_gates(findings, header="在庫の状態"):
+        print("\n在庫が下限を割った。次の実験に進む前に補充する。", file=sys.stderr)
+        return 1
+    return 0
+
+
+def _mark_idea(root: Path, idea_id: str, *, status: str, experiment: str | None) -> None:
+    """在庫の項目に実験を結びつける。手で status を書き換えさせないため。"""
+    path = _backlog_path(root)
+    if not path.exists():
+        return
+    backlog = _load_yaml(path)
+    for i in backlog.get("ideas") or []:
+        if isinstance(i, dict) and i.get("id") == idea_id:
+            i["status"] = status
+            if experiment:
+                i["experiment"] = experiment
+            _dump_yaml(path, backlog)
+            return
+
+
 def cmd_idea_list(args: argparse.Namespace) -> int:
     state = load_state()
     ideas = state.ideas if args.all else state.open_ideas()
@@ -585,6 +706,25 @@ def build_parser() -> argparse.ArgumentParser:
     il = isub.add_parser("list", help="gain/cost 順に並べる")
     il.add_argument("--all", action="store_true")
     il.set_defaults(func=cmd_idea_list)
+
+    ia = isub.add_parser("add", help="在庫に足す。検証を通らないと入らない")
+    ia.add_argument("--action", required=True, help="何をするか。1実験の粒度で20字以上")
+    ia.add_argument("--axes", required=True, help="触る軸をカンマ区切りで")
+    ia.add_argument("--tier", required=True, choices=("exploit", "explore", "moonshot"))
+    ia.add_argument("--magnitude", required=True, help="期待する変化量（正の数値）")
+    ia.add_argument("--evidence", required=True,
+                    help="出典。priors/common.md#c01 / exp0003 / dec0002 / URL のいずれかを含める")
+    ia.add_argument("--metric", default="cv.mean")
+    ia.add_argument("--direction", default="increase", choices=("increase", "decrease"))
+    ia.add_argument("--cost", default="1.0", help="1.0 が標準的な1実験")
+    ia.add_argument("--source", default=None)
+    ia.add_argument("--id", default=None)
+    ia.set_defaults(func=cmd_idea_add)
+
+    ir = isub.add_parser("retire", help="在庫から捨てる。理由が要る")
+    ir.add_argument("idea")
+    ir.add_argument("--reason", required=True, help="なぜ捨てるのか。20字以上")
+    ir.set_defaults(func=cmd_idea_retire)
 
     r = sub.add_parser("render", help="${metrics...} を実値に置いて記録を読む")
     r.add_argument("experiment")

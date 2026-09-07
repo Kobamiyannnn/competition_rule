@@ -1,0 +1,66 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 依存を入れる
+        run: python -m pip install --quiet pyyaml pytest pyflakes
+
+      - name: pyflakes
+        run: python -m pyflakes tools/expkit tools/hooks templates
+
+      - name: テスト
+        run: python -m pytest -q
+
+      # 規範の文書と実装がずれていないかを、テストとは別に明示して回す。
+      # ここが落ちるときは、スキルの例文が linter に落ちる状態になっている。
+      - name: スキルの例文と linter の一致
+        run: python -m pytest tools/tests/test_skill_examples.py -q
+
+      # テンプレート同梱の設定ファイルが壊れていないか。
+      - name: 同梱の設定が読めるか
+        run: |
+          python - <<'PY'
+          import sys
+          sys.path.insert(0, "tools")
+          import os
+          os.environ["EXPKIT_ROOT"] = "."
+          from expkit.config import load_competition, load_lint_config
+          from expkit.state import load_state
+
+          cfg = load_lint_config()
+          assert cfg["vocab"], "語彙規則が空"
+          assert cfg["limits"], "字数上限が空"
+          comp = load_competition()
+          assert comp.get("phases"), "phase が定義されていない"
+          state = load_state()
+          assert len(state.axis_ids) >= 10, f"軸が少なすぎる: {len(state.axis_ids)}"
+          print(f"ok: 語彙 {sum(len(v['patterns']) for v in cfg['vocab'].values())} パターン / "
+                f"軸 {len(state.axis_ids)} 本")
+          PY
+
+      # hook が JSON を受けて期待どおりの終了コードを返すか。
+      - name: hook の挙動
+        run: |
+          set -e
+          run_hook() {
+            echo "$2" | python3 "$1" >/dev/null 2>&1 && echo 0 || echo $?
+          }
+          test "$(run_hook tools/hooks/guard.py \
+            '{"hook_event_name":"PreToolUse","tool_input":{"file_path":"'"$PWD"'/experiments/exp0001/metrics.json"}}')" = 2
+          test "$(run_hook tools/hooks/guard.py \
+            '{"hook_event_name":"PreToolUse","tool_input":{"file_path":"'"$PWD"'/src/train.py"}}')" = 0
+          test "$(run_hook tools/hooks/session.py \
+            '{"hook_event_name":"SessionStart","source":"startup","cwd":"'"$PWD"'"}')" = 0
+          echo "ok: hook の終了コードは期待どおり"

@@ -21,6 +21,7 @@ from .schema import (
     DECISION_TYPES,
     DIRECTIONS,
     HYPOTHESIS_STATUS,
+    IDEA_STATUS,
     TIERS,
 )
 
@@ -128,6 +129,8 @@ def _texts(doc: dict, kind: str) -> list[tuple[str, str, str]]:
             hid = h.get("id") or f"#{i}"
             push("record.hypothesis.statement", f"hypothesis[{hid}].statement", h.get("statement"))
             push("record.hypothesis.falsification", f"hypothesis[{hid}].falsification", h.get("falsification"))
+    elif kind == "idea":
+        push("idea.action", "action", doc.get("action"))
     elif kind == "decision":
         push("decision.question", "question", doc.get("question"))
         for i, o in enumerate(doc.get("options") or []):
@@ -399,6 +402,136 @@ def _lint_waivers(doc: dict, report: Report) -> None:
 
 
 # ---------------------------------------------------------------------------
+# idea — アイデア在庫
+#
+# 在庫の下限は「打ち手がない」と言わせないための仕組みなので、
+# 中身の薄い項目で埋められると形骸化する。ここが検証の要。
+# ---------------------------------------------------------------------------
+
+def lint_idea(
+    idea: dict,
+    *,
+    cfg: dict,
+    index: int,
+    known_axes: set[str] | None = None,
+    known_experiments: set[str] | None = None,
+) -> Report:
+    ident = idea.get("id") if isinstance(idea, dict) else None
+    report = Report(target=f"ideas/backlog.yaml [{ident or f'#{index}'}]")
+
+    if not isinstance(idea, dict):
+        report.add(rule="schema.type", severity="error", field=f"ideas[{index}]",
+                   message="在庫の要素はマッピング。")
+        return report
+
+    for key in ("id", "action", "axes", "tier", "expected", "evidence", "cost"):
+        if idea.get(key) in (None, "", [], {}):
+            report.add(rule="schema.missing", severity="error", field=key,
+                       message="必須の欄が空。")
+
+    if idea.get("tier") is not None and idea.get("tier") not in TIERS:
+        report.add(rule="schema.enum", severity="error", field="tier",
+                   message=f"tier は {'/'.join(TIERS)} のいずれか。")
+
+    status = idea.get("status", "open")
+    if status not in IDEA_STATUS:
+        report.add(rule="schema.enum", severity="error", field="status",
+                   message=f"status は {'/'.join(IDEA_STATUS)} のいずれか。")
+    if status == "retired" and not str(idea.get("retired_reason") or "").strip():
+        report.add(
+            rule="idea.retired_without_reason", severity="error", field="retired_reason",
+            message="捨てるなら理由を書く。理由なく消せると、在庫の下限は意味を失う。",
+        )
+
+    if known_axes is not None:
+        for ax in idea.get("axes") or []:
+            if ax not in known_axes:
+                report.add(rule="schema.unknown_axis", severity="error", field="axes",
+                           message=f"coverage.yaml に無い軸: {ax!r}")
+
+    _lint_expected(idea.get("expected"), "expected", report, prefix=False)
+
+    cost = idea.get("cost")
+    if not isinstance(cost, (int, float)) or isinstance(cost, bool) or cost <= 0:
+        report.add(
+            rule="schema.cost", severity="error", field="cost",
+            message="コストを正の数値で書く（1.0 が標準的な1実験）。"
+                    " 書けないと gain/cost で並べられず、確度の高い順に試せない。",
+        )
+
+    structure = cfg.get("structure", {})
+
+    action = str(idea.get("action") or "").strip()
+    min_chars = int(structure.get("idea_action_min_chars", 20))
+    if action and _visible_len(action) < min_chars:
+        report.add(
+            rule="idea.action_too_vague", severity="error", field="action",
+            message=f"{_visible_len(action)}字。{min_chars}字未満は1実験の粒度になっていない。"
+                    " 「特徴量を追加」ではなく、何をどう作るのかまで書く。",
+        )
+
+    evidence = str(idea.get("evidence") or "").strip()
+    if evidence and not _match_any(evidence, structure.get("idea_evidence_patterns") or []):
+        report.add(
+            rule="idea.evidence_without_source", severity="error", field="evidence",
+            message="出典を指していない。priors の項目（priors/common.md#c01）、"
+                    " このコンペの実験（exp0003）、決定（dec0002）、URL のいずれかを含める。"
+                    " 出典を要求するのは、在庫を思いつきで埋められないようにするため。",
+        )
+    if known_experiments is not None:
+        for ref in re.findall(r"\bexp\d{4}\b", evidence):
+            if ref not in known_experiments:
+                report.add(rule="link.experiment_missing", severity="error", field="evidence",
+                           message=f"存在しない実験を出典にしている: {ref}")
+
+    _lint_prose(idea, "idea", cfg, report)
+    return report
+
+
+def lint_backlog(
+    backlog: dict,
+    *,
+    cfg: dict,
+    policy: dict,
+    known_axes: set[str] | None = None,
+    known_experiments: set[str] | None = None,
+) -> tuple[list[Report], Report]:
+    """個々のアイデアの検査と、在庫全体の検査を返す。"""
+    ideas = list(backlog.get("ideas") or [])
+    per_idea = [
+        lint_idea(i, cfg=cfg, index=n, known_axes=known_axes,
+                  known_experiments=known_experiments)
+        for n, i in enumerate(ideas)
+    ]
+
+    whole = Report(target="ideas/backlog.yaml")
+    seen: set[str] = set()
+    for i in ideas:
+        if not isinstance(i, dict):
+            continue
+        ident = str(i.get("id") or "")
+        if ident and ident in seen:
+            whole.add(rule="idea.duplicate_id", severity="error", field="ideas",
+                      message=f"ID が重複している: {ident}")
+        seen.add(ident)
+
+    # 在庫全体が複数の軸にまたがっているか。
+    # 同じ発想の変奏で下限を満たされると、在庫の仕組みが形骸化する。
+    open_ideas = [i for i in ideas
+                  if isinstance(i, dict) and (i.get("status") or "open") == "open"]
+    min_axes = int(policy.get("backlog_min_axes", 3))
+    axes = {a for i in open_ideas for a in (i.get("axes") or [])}
+    if len(open_ideas) >= min_axes and len(axes) < min_axes:
+        whole.add(
+            rule="backlog.too_narrow", severity="error", field="ideas",
+            message=f"未実行のアイデアが {len(axes)} 軸にしか散っていない（下限 {min_axes} 軸）。"
+                    " 同じ発想の変奏で在庫を埋めている。"
+                    " 未着手の軸か knowledge/priors/ から別種の打ち手を足す。",
+        )
+    return per_idea, whole
+
+
+# ---------------------------------------------------------------------------
 # decision
 # ---------------------------------------------------------------------------
 
@@ -476,23 +609,30 @@ def lint_decision(
     return report
 
 
-def _lint_expected(expected: Any, where: str, report: Report) -> None:
+def _lint_expected(expected: Any, where: str, report: Report, *, prefix: bool = True) -> None:
+    """期待する観測を検査する。決定とアイデアで共通。
+
+    ここが数値で書けないものは、機械で答え合わせできない。
+    答え合わせできないと較正が取れず、賭けなさすぎも見積もりの甘さも見えなくなる。
+    """
+    base = f"{where}.expected" if prefix else where
+
     if not isinstance(expected, dict):
-        report.add(rule="schema.missing", severity="error", field=f"{where}.expected",
-                   message="期待する観測が無い。機械で答え合わせできない決定は台帳に残さない。")
+        report.add(rule="schema.missing", severity="error", field=base,
+                   message="期待する観測が無い。機械で答え合わせできないものは台帳に残さない。")
         return
     if not expected.get("metric"):
-        report.add(rule="schema.missing", severity="error", field=f"{where}.expected.metric",
+        report.add(rule="schema.missing", severity="error", field=f"{base}.metric",
                    message="どの指標が動くのかを書く（例: cv.mean）。")
     if expected.get("direction") not in DIRECTIONS:
-        report.add(rule="schema.enum", severity="error", field=f"{where}.expected.direction",
+        report.add(rule="schema.enum", severity="error", field=f"{base}.direction",
                    message=f"direction は {'/'.join(DIRECTIONS)} のいずれか。")
     mag = expected.get("magnitude")
     if not isinstance(mag, (int, float)) or isinstance(mag, bool):
         report.add(
-            rule="schema.magnitude", severity="error", field=f"{where}.expected.magnitude",
-            message="期待する変化量を数値で書く。書けないなら、その決定は根拠が言葉だけになっている。",
+            rule="schema.magnitude", severity="error", field=f"{base}.magnitude",
+            message="期待する変化量を数値で書く。書けないなら、根拠が言葉だけになっている。",
         )
     elif mag <= 0:
-        report.add(rule="schema.magnitude", severity="error", field=f"{where}.expected.magnitude",
+        report.add(rule="schema.magnitude", severity="error", field=f"{base}.magnitude",
                    message="変化量は絶対値の正数で書く。向きは direction が持つ。")
