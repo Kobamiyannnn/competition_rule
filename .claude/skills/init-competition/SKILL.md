@@ -16,6 +16,35 @@ description: コンペ用のリポジトリを一度で立ち上げる。competi
 
 ## 手順
 
+### 0. git を付け替える（clone で始めた場合）
+
+まだやっていなければ、最初にこれを実行する。
+
+```
+bash tools/bootstrap.sh
+```
+
+やること。
+
+- `origin` を `template` に改名する。以降 `origin` は未設定になるので、
+  コンペ用のリポジトリ（**private を推奨**）を作って `git remote add origin <URL>`
+- テンプレートへの誤プッシュを止める pre-push hook を有効にする
+- `data/` を作る（`.gitignore` でコミット対象から外れている）
+
+履歴ごと捨てたいなら `bash tools/bootstrap.sh --fresh`。
+ただし `git pull template main` でテンプレートの更新を取り込めなくなる。
+
+GitHub の「Use this template」で始めた場合は、履歴も `origin` も
+最初から正しいので、hook の有効化だけやる。
+
+```
+git config core.hooksPath tools/githooks
+```
+
+**コンペのデータをコミットしない。** 規約でほぼ確実に再配布禁止になっている。
+`.gitignore` で除外してあるが、`git add -f` で強制追加しない。
+データの取得元と展開手順は `knowledge/operations.md` に書く。
+
 ### 1. 聞く
 
 利用者に次を聞く。分かる範囲でよい。**推測で埋めない**。

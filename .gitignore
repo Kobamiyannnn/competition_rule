@@ -1,5 +1,48 @@
+# --- 生成物 -----------------------------------------------------------------
 __pycache__/
 *.pyc
 .pytest_cache/
+.ipynb_checkpoints/
 reports/report.md
 .claude/handoff.md
+
+# --- コンペのデータ ----------------------------------------------------------
+# 規約でほぼ確実に再配布禁止。リポジトリに入れない。
+# 取得元と展開手順は knowledge/operations.md に書く。
+data/
+input/
+output/
+submissions/
+*.csv
+*.tsv
+*.parquet
+*.feather
+*.arrow
+*.zip
+*.gz
+*.7z
+
+# --- 学習の生成物 ------------------------------------------------------------
+# 重いものは残さない。metrics.json と record.yaml があれば再現できる。
+experiments/*/artifacts/
+models/
+*.npy
+*.npz
+*.pkl
+*.pickle
+*.joblib
+*.h5
+*.pt
+*.pth
+*.ckpt
+*.onnx
+*.safetensors
+*.log
+
+# --- 実験管理ツールの作業ディレクトリ ------------------------------------------
+wandb/
+mlruns/
+optuna.db
+lightning_logs/
+
+# どうしても追跡したいファイルは git add -f で個別に足す。

@@ -57,6 +57,20 @@ jobs:
                 f"軸 {len(state.axis_ids)} 本")
           PY
 
+      - name: シェルスクリプトの構文
+        run: bash -n tools/bootstrap.sh && bash -n tools/githooks/pre-push
+
+      # コンペで使い始めたリポジトリでは、記録そのものも CI で検査する。
+      # hook を迂回して書かれた記録をここで捕まえる。
+      - name: 記録の検査（初期化済みのリポジトリのみ）
+        run: |
+          name=$(python -c "import yaml;print((yaml.safe_load(open('competition.yaml')) or {}).get('name',''))")
+          if [ "$name" = "TODO" ] || [ -z "$name" ]; then
+            echo "テンプレートのまま（name=$name）。記録の検査は飛ばす。"
+          else
+            python tools/expctl lint
+          fi
+
       # hook が JSON を受けて期待どおりの終了コードを返すか。
       - name: hook の挙動
         run: |

@@ -98,8 +98,41 @@ SessionStart は `source: compact` でも走るので、**compact の直後に�
 
 ## 使い方
 
+### GitHub で始める（推奨）
+
+このリポジトリを Settings → Template repository にしておくと、
+**Use this template** から履歴なし・`origin` が自分のリポジトリの状態で始められる。
+clone した場合と違って git の付け替えが要らない。
+
+作ったら hook だけ有効にする。
+
+```bash
+git config core.hooksPath tools/githooks
+```
+
+### clone で始める
+
 ```bash
 git clone <このリポジトリ> my-competition && cd my-competition
+bash tools/bootstrap.sh
+```
+
+`git clone` すると **`origin` はテンプレートを指したまま**になる。
+気づかずにプッシュすると、コンペの作業が公開テンプレート側に飛ぶ。
+`bootstrap.sh` がこれを直す。
+
+- `origin` を `template` に改名する（`git pull template main` で更新を取り込める）
+- テンプレート宛のプッシュを止める pre-push hook を有効にする
+- `data/` を作る
+
+履歴ごと捨てるなら `bash tools/bootstrap.sh --fresh`。
+テンプレートの更新は取り込めなくなる。
+
+そのあと `git remote add origin <自分のリポジトリ>`（**private を推奨**）。
+
+### コンペを立ち上げる
+
+```bash
 claude
 > /init-competition
 ```
@@ -157,11 +190,13 @@ reports/
   report.md                expctl report が生成。手で編集しない
 
 tools/
+  bootstrap.sh             clone 直後に一度だけ実行して git を付け替える
+  githooks/pre-push        テンプレートへの誤プッシュを止める
   expctl                   CLI
   expkit/                  lint・ゲート・状態集計・レポート生成
   hooks/guard.py           記録の lint 強制と metrics.json の保護
   hooks/session.py         引き継ぎの注入と compact 前の点検
-  tests/                   87件
+  tests/                   117件
 templates/
   experiment_runner.py     実験スクリプトの雛形
   CLAUDE.md                作業規範の雛形
@@ -220,6 +255,16 @@ templates/
 `competition.yaml` の `policy` で在庫の下限、tier の窓と許容幅、
 CV 信頼性の閾値、的中率の上限を変えられる。
 
+## データを絶対にコミットしない
+
+コンペのデータは規約でほぼ確実に再配布禁止になっている。
+`.gitignore` で `data/` `input/` `output/` `submissions/` と
+`*.csv` `*.parquet` `*.pkl` `*.pt` などを除外してある。
+
+取得元と展開手順は `knowledge/operations.md` に書き、データそのものは置かない。
+記録（`record.yaml` / `metrics.json` / `decisions/` / `knowledge/`）は
+除外対象に入っていないので、そのままコミットされる。
+
 ## テスト
 
 ```bash
@@ -228,7 +273,9 @@ python3 -m pytest -q
 
 CI（`.github/workflows/ci.yml`）は pytest に加えて、pyflakes、
 **スキルの例文と linter の判定の一致**、同梱設定の読み込み、
-hook の終了コードを確認する。
+シェルスクリプトの構文、hook の終了コードを確認する。
+コンペで使い始めたリポジトリでは `expctl lint` も走り、
+hook を迂回して書かれた記録をここで捕まえる。
 
 規範を触ったときに壊れやすいのは「スキルの例文と linter の一致」。
 ここがずれると、エージェントは文書に従って書いて linter に落とされ続け、
