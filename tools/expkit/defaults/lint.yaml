@@ -12,6 +12,7 @@ limits:
   record.observation: 300
   record.hypothesis.statement: 200
   record.hypothesis.falsification: 200
+  record.notes: 200
   decision.question: 150
   decision.options.action: 150
   decision.rationale.reason: 200
@@ -42,6 +43,8 @@ field_profiles:
   record.observation: strict
   record.hypothesis.statement: interpretive
   record.hypothesis.falsification: strict
+  # 実行メモは事実だけだが、batch サイズや fold 番号を書くので数値は許す。
+  record.notes: strict
   decision.question: interpretive
   decision.options.action: strict
   decision.rationale.reason: interpretive
@@ -249,6 +252,7 @@ structure:
     # 結論は特定の実験に紐づかないので ${...} 参照が使えない。
     # ここで数値を禁じると曖昧な表現に追いやられるため、数値は許して語彙規則だけ効かせる。
     - report.conclusion
+    - record.notes
     - record.change.summary
     - record.hypothesis.statement
     - record.hypothesis.falsification

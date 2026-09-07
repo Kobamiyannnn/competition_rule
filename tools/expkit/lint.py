@@ -121,6 +121,7 @@ def _texts(doc: dict, kind: str) -> list[tuple[str, str, str]]:
     if kind == "record":
         push("record.change.summary", "change.summary", (doc.get("change") or {}).get("summary"))
         push("record.observation", "observation", doc.get("observation"))
+        push("record.notes", "notes", doc.get("notes"))
         for i, h in enumerate(doc.get("hypothesis") or []):
             if not isinstance(h, dict):
                 continue

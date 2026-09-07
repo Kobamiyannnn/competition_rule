@@ -476,6 +476,25 @@ def cmd_idea_list(args: argparse.Namespace) -> int:
 
 
 # ---------------------------------------------------------------------------
+# brief
+# ---------------------------------------------------------------------------
+
+def cmd_brief(args: argparse.Namespace) -> int:
+    from .brief import build as build_brief
+
+    root = repo_root()
+    text = build_brief(load_state(root), root)
+    if args.out:
+        out = Path(args.out)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(text, encoding="utf-8")
+        print(f"{out} に書いた。")
+    else:
+        print(text, end="")
+    return 0
+
+
+# ---------------------------------------------------------------------------
 # render
 # ---------------------------------------------------------------------------
 
@@ -570,6 +589,10 @@ def build_parser() -> argparse.ArgumentParser:
     r = sub.add_parser("render", help="${metrics...} を実値に置いて記録を読む")
     r.add_argument("experiment")
     r.set_defaults(func=cmd_render)
+
+    br = sub.add_parser("brief", help="引き継ぎを出す。セッション開始時に自動で走る")
+    br.add_argument("--out", default=None, help="ファイルに書き出す（既定は標準出力）")
+    br.set_defaults(func=cmd_brief)
 
     rp = sub.add_parser("report", help="記録からレポートを組み立てる")
     rp.add_argument("--out", default=None)

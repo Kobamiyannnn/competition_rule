@@ -93,6 +93,12 @@ hypothesis: []
 #   status: open
 #   resolved_by: null
 
+# 実行上の状態だけを書く。セッションを切っても失われないようにするための欄。
+# 「fold 3 で OOM。batch を 16 にして再実行中」のような、次に開いた人が
+# 同じ場所から再開するのに要る情報。**結果の解釈は書かない**（それは observation）。
+# 実験が終わったら消してよい。200字。
+notes: null
+
 # lint をどうしても通したいときの抜け道。使ったこと自体が記録に残る。
 lint_waived: []
 # - rule: vocab.metaphor
