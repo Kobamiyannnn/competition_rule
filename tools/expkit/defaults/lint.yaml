@@ -1,0 +1,285 @@
+# expkit 既定の lint 設定。
+# リポジトリ直下に lint.yaml を置くと、この既定にマージして上書きできる。
+# マージ規則: マッピングは再帰マージ、リストは置換。
+# 語彙リストへの追加だけしたい場合は `vocab.<rule>.extra` に書く（既定に追加される）。
+
+# ---------------------------------------------------------------------------
+# 字数上限。全角・半角を区別せず文字数で数える。改行と空白は数えない。
+# 「太った表現」を書く余白を物理的に奪うのが目的なので、緩めない方がよい。
+# ---------------------------------------------------------------------------
+limits:
+  record.change.summary: 200
+  record.observation: 300
+  record.hypothesis.statement: 200
+  record.hypothesis.falsification: 200
+  decision.question: 150
+  decision.options.action: 150
+  decision.rationale.reason: 200
+  decision.outcome.note: 100
+  report.conclusion: 600
+
+# ---------------------------------------------------------------------------
+# 各記述欄に適用するプロファイル。
+#   strict       : 事実だけを書く欄。ヘッジ・比喩・評価語・曖昧な量的表現すべて error。
+#   interpretive : 解釈を書く欄。ヘッジは warn まで緩め、評価語は許す。比喩は許さない。
+# ---------------------------------------------------------------------------
+profiles:
+  strict:
+    hedge: error
+    metaphor: error
+    evaluative: error
+    filler: error
+    vague_quantity: error
+  interpretive:
+    hedge: warn
+    metaphor: error
+    evaluative: allow
+    filler: error
+    vague_quantity: error
+
+field_profiles:
+  record.change.summary: strict
+  record.observation: strict
+  record.hypothesis.statement: interpretive
+  record.hypothesis.falsification: strict
+  decision.question: interpretive
+  decision.options.action: strict
+  decision.rationale.reason: interpretive
+  decision.outcome.note: strict
+  report.conclusion: strict
+
+# ---------------------------------------------------------------------------
+# 語彙規則。patterns は正規表現（re.search）。日本語と英語を同じリストに置く。
+# 誤検知が出たら lint.yaml で `extra: []` ではなく patterns 全体を上書きするか、
+# その実験に限って record の lint_waived で理由付きで抜ける。
+# ---------------------------------------------------------------------------
+vocab:
+  # ヘッジ: 断定を避けて情報量を削る表現。観測欄でこれが出たら、
+  # 観測していないことを書いている。
+  hedge:
+    message: ヘッジ表現。観測したことだけを断定形で書く。断定できないなら hypothesis に移す。
+    patterns:
+      - と思われ
+      - と考えられ
+      - ように見え
+      - ような気が
+      - 感触
+      - 印象
+      - 気配
+      - 兆し
+      - 傾向が見ら
+      - 傾向にある
+      - 傾向として
+      - 示唆
+      - 可能性がある
+      - 可能性も
+      - かもしれ
+      - ではないだろうか
+      - と推測
+      - と推察
+      - おそらく
+      - 恐らく
+      - たぶん
+      - 多分
+      - 概ね
+      - おおむね
+      - 一定の
+      - ある程度
+      - それなりに
+      - 比較的
+      - 気味
+      - '\bseems?\b'
+      - '\bappears? to\b'
+      - '\bsuggests?\b'
+      - '\bindicat(e|es|ing) that\b'
+      - '\blikely\b'
+      - '\bpresumably\b'
+      - '\barguably\b'
+      - '\btends? to\b'
+      - '\b(may|might|could) be\b'
+      - '\bpotentially\b'
+      - '\bmore or less\b'
+    extra: []
+
+  # 比喩・擬人化: モデルや特徴量を主体として語る表現。
+  # 「効いた」は Kaggle 日本語で常用されるが、量を語らないので禁止する。
+  # 「この特徴量が効いた」ではなく「この特徴量の追加で ${metrics.cv.mean} が +0.004」と書く。
+  metaphor:
+    message: 比喩・擬人化。何がどれだけ動いたかを metrics 参照で書く。
+    patterns:
+      - 効いて
+      - 効いた
+      - 効かな
+      - 効きが
+      - 刺さ
+      - 伸び代
+      - 伸びしろ
+      - 頭打ち
+      - 天井
+      - 地力
+      - 地合い
+      - ポテンシャル
+      - 引っ張られ
+      - 引きずられ
+      - 相性
+      - 素直に
+      - 筋が良
+      - 筋が悪
+      - 手応え
+      - 悪さをし
+      # 擬人化。間に目的語が入っても拾えるよう、句点までの範囲で見る。
+      - 'モデル(が|は|に)[^。\n]{0,30}(理解|把握|気づ|気付|注目|意識|混乱|迷っ|迷う|覚え|見えて|見てい)'
+      - '(モデル|ネットワーク|学習器)[^。\n]{0,30}(賢|頭が|考え方)'
+      - '特徴量?[^。\n]{0,20}(効いて|効いた|刺さ)'
+      - 賢く
+      - 賢い
+      - 苦手
+      - 得意
+      - '\bthe model (understands|knows|realizes|struggles|prefers|likes)\b'
+      - '\bmagic\b'
+      - '\bsweet spot\b'
+    extra: []
+
+  # 評価語: 良し悪しの判断。事実欄では禁止し、解釈欄でだけ許す。
+  # 方向を表す語（改善・悪化・向上・低下）は事実なので含めない。
+  evaluative:
+    message: 評価語。事実欄では良し悪しを書かない。数値の変化だけを書く。
+    patterns:
+      - 良い
+      - 良く
+      - 良好
+      - 悪い
+      - 悪く
+      - 優れ
+      - 劣っ
+      - 劣る
+      - 有効
+      - 効果的
+      - 有望
+      - 期待でき
+      - 好調
+      - 不調
+      - 素晴ら
+      - 望ましい
+      - 理想的
+      - 十分
+      - 不十分
+      - 満足
+      - 妥当
+      - '\b(good|bad|great|poor|excellent|promising|effective|superior|inferior)\b'
+    extra: []
+
+  # 空句: 情報を足さずに字数だけ増やす定型句。LLM が最も書きたがる。
+  filler:
+    message: 空句。削っても情報が減らない。削る。
+    patterns:
+      - 重要である
+      - 重要だ
+      - 重要な点
+      - 注目に値
+      - 興味深い
+      - 示唆に富
+      - 総合的に判断
+      - 全体として
+      - 全体的に
+      - と言えるだろう
+      - と言える
+      - 今後の課題
+      - さらなる検証
+      - さらなる調査
+      - 引き続き
+      - 念のため
+      - 一般的に
+      - 上記の通り
+      - 前述の通り
+      - ことが求められる
+      - 鍵となる
+      - 鍵を握
+      - という観点
+      - 留意
+      - '\bit is (important|worth) (to note|noting)\b'
+      - '\binterestingly\b'
+      - '\bnotably\b'
+      - '\boverall,\b'
+      - '\bin general\b'
+      - '\bfurther (investigation|analysis) is needed\b'
+      - '\bplays? a key role\b'
+      - '\bsheds? light\b'
+    extra: []
+
+  # 曖昧な量的表現: 数値が metrics にあるのに言葉でぼかす表現。
+  vague_quantity:
+    message: 曖昧な量的表現。metrics 参照か閾値つきの数値で書く。
+    patterns:
+      - 大幅
+      - 大きく
+      - 小さく
+      - わずか
+      - 僅か
+      - 少し
+      - かなり
+      - 相当
+      - 著しく
+      - 極めて
+      - 非常に
+      - 微増
+      - 微減
+      - 微妙
+      - ほんの
+      - '\bsignificantly\b'
+      - '\bslightly\b'
+      - '\bsubstantially\b'
+      - '\bconsiderably\b'
+      - '\bdramatically\b'
+      - '\bmarginally\b'
+      - '\ba (bit|lot)\b'
+    extra: []
+
+# ---------------------------------------------------------------------------
+# 構造規則。語彙より優先度が高い。
+# ---------------------------------------------------------------------------
+structure:
+  # observation に metrics 参照 ${...} が最低いくつ必要か。
+  # 0 にすると観測欄が数値から切り離され、この基盤の意味がなくなる。
+  observation_min_refs: 1
+
+  # 生の小数・パーセントを書いてよい欄。ここに無い strict 欄で裸の数値は error。
+  # 数値は metrics.json に機械が書いたものを ${...} で参照する。
+  bare_number_allowed_fields:
+    # 結論は特定の実験に紐づかないので ${...} 参照が使えない。
+    # ここで数値を禁じると曖昧な表現に追いやられるため、数値は許して語彙規則だけ効かせる。
+    - report.conclusion
+    - record.change.summary
+    - record.hypothesis.statement
+    - record.hypothesis.falsification
+    - decision.options.action
+    - decision.question
+
+  # falsification が条件文の形になっているかの検査。
+  # 条件節マーカーと観測可能マーカーの両方を含まないと error。
+  falsification_condition_markers:
+    - なら
+    - ならば
+    - 場合
+    - とき
+    - 際に
+    - れば
+    - '\bif\b'
+    - '\bwhen\b'
+  falsification_observable_markers:
+    - '\$\{'
+    - '\d'
+    - 以上
+    - 以下
+    - 上回
+    - 下回
+    - 超え
+    - 未満
+    - 変わらな
+    - 変化しな
+    - 差が
+    - 逆転
+    - 再現しな
+    - 同じ
+    - '\bnot\b'
+    - '\bunchanged\b'

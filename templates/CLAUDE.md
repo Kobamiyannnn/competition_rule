@@ -1,0 +1,83 @@
+# このリポジトリでの作業規範
+
+<!-- /init-competition がコンペに合わせて具体化する。 -->
+
+コンペ: TODO
+データ形式: TODO
+
+## 最初に読むもの
+
+作業を始める前に `tools/expctl status` を実行し、出力をそのまま読む。
+要約しない。要約すると数値が落ちて評価語に置き換わる。
+
+## 守ること
+
+### 数値に触らない
+
+`experiments/*/metrics.json` は機械しか書かない。手で編集すると
+integrity ハッシュがずれて lint が落ちる。
+
+- 実験の数値: 実験スクリプトから `expkit.metrics.write(...)`
+- LB スコア: `tools/expctl lb <exp_id> --public <score>`
+
+### 記録に解釈を混ぜない
+
+`record.yaml` の3つの欄は別の問いに答える。混ぜない。
+
+- `change` — 何を変えたか（結果を知る前に書ける内容）
+- `observation` — 何が起きたか（`${metrics....}` 参照。裸の数値は書かない）
+- `hypothesis` — なぜだと考えるか（反証条件が書けないなら書かない）
+
+詳しくは `/log-experiment`。
+
+### 反証条件が書けない考えは記録に入れない
+
+「〜が効いている」「モデルが〜を捉えられていない」は、反証条件が書けない。
+消すか、観測に降ろすか、反証できる粒度まで割る。消すのは負けではない。
+
+### 「打ち手がない」と書く前に
+
+順に確認する。ほとんどの場合、打ち手はある。
+
+1. `expctl status` の未着手の軸
+2. `expctl idea list` の在庫
+3. `knowledge/priors/` の未消化項目
+4. 未決着の仮説の反証条件（そのまま実験になる）
+
+打ち切るなら `expctl decide new --type stop`。ゲートが通らないなら
+まだ打ち切る段階ではない。
+
+### ノイズと結論を区別する
+
+LB や CV の差が `competition.yaml` の `lb_noise`（CV なら fold の標準誤差）
+を下回るなら、それは「効かなかった」ではなく「判定できなかった」。
+`expctl decide close` が機械判定するので、自分で読み替えない。
+
+### 飽和の基準を先に決める
+
+ハイパーパラメータ探索は安全で生産的に見えるので無限に続けられる。
+探索を始める前に飽和の判定基準を決め、達したら
+`expctl saturate <axis> --criterion "..."` で宣言する。
+宣言した軸には以降 `tier: exploit` で触れなくなる。
+
+## 使うスキル
+
+| 場面 | スキル |
+|---|---|
+| 実験を回し終えて記録を書く | `/log-experiment` |
+| 次に何を試すか決める | `/decide-next` |
+| レポートを作る | `/write-report` |
+
+## 実験の1周
+
+```
+tools/expctl status                          # 状態を見る
+tools/expctl idea list                       # 在庫から選ぶ
+tools/expctl decide new --type run           # 決定を書く
+tools/expctl new --tier ... --axes ... \     # 実験を立てる
+    --based-on ... --decision ... --idea ...
+# 実験を回す（スクリプトから expkit.metrics.write で metrics.json を書く）
+# record.yaml の記述欄を埋める
+tools/expctl lint <exp_id>                   # 規範を通す
+tools/expctl decide close <dec_id> --experiment <exp_id>   # 答え合わせ
+```
