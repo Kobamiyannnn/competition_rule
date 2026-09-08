@@ -13,7 +13,7 @@ description: 次に何を試すかを決め、決定を台帳に残す。アイ�
 ### 1. 状態を見る
 
 ```
-tools/expctl status
+uv run expctl status
 ```
 
 見るのは5つ。
@@ -30,7 +30,7 @@ tools/expctl status
 ### 2. 在庫から選ぶ
 
 ```
-tools/expctl idea list
+uv run expctl idea list
 ```
 
 `expected.magnitude / cost` の降順で出る。**上位から選ぶのが既定**。
@@ -51,7 +51,7 @@ tools/expctl idea list
 補充は `expctl idea add` で行う。入れる前に検証がかかる。
 
 ```
-tools/expctl idea add \
+uv run expctl idea add \
   --action "adversarial validation で train と test の分布差を測り、判別に効く列を落とす。" \
   --axes validation --tier explore --magnitude 0.002 \
   --evidence "priors/common.md#c04" --cost 0.8
@@ -66,13 +66,13 @@ tools/expctl idea add \
 捨てるときも理由が要る。
 
 ```
-tools/expctl idea retire i0004 --reason "i0003 と同じ集約を別の統計量で作るだけで、独立した検証にならない。"
+uv run expctl idea retire i0004 --reason "i0003 と同じ集約を別の統計量で作るだけで、独立した検証にならない。"
 ```
 
 ### 3. 決定を書く
 
 ```
-tools/expctl decide new --type run
+uv run expctl decide new --type run
 ```
 
 `options` は2つ以上書く。比較していない決定は根拠が弱い。
@@ -95,7 +95,7 @@ expected:
 ### 4. 実験を立てて回す
 
 ```
-tools/expctl new --tier <tier> --axes <axes> --based-on <exp> --decision <dec> --idea <idea>
+uv run expctl new --tier <tier> --axes <axes> --based-on <exp> --decision <dec> --idea <idea>
 ```
 
 ゲートに止められたら、止めた理由に対処する。`--force` は使わない
@@ -104,7 +104,7 @@ tools/expctl new --tier <tier> --axes <axes> --based-on <exp> --decision <dec> -
 ### 5. 答え合わせ
 
 ```
-tools/expctl decide close <dec_id> --experiment <exp_id>
+uv run expctl decide close <dec_id> --experiment <exp_id>
 ```
 
 `hit` / `miss` / `inconclusive` が機械判定される。
@@ -153,7 +153,7 @@ OOF 予測を切り口を変えて集計し、誤差が集中している切り�
 そうならないよう、**飽和の判定基準を探索を始める前に決める**。
 
 ```
-tools/expctl saturate hyperparameters \
+uv run expctl saturate hyperparameters \
   --criterion "直近30試行で best がノイズ幅0.002を超えて更新されない" \
   --evidence exp0012,exp0013
 ```

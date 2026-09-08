@@ -13,11 +13,11 @@ description: 実験1本の記録を書く。change・observation・hypothesis �
 
 1. 実験スクリプトから `expkit.metrics.write` で `metrics.json` を書く
 2. `record.yaml` の記述欄を埋める
-3. `tools/expctl lint <exp_id>` を通す
+3. `uv run expctl lint <exp_id>` を通す
 4. 通ったらコミットする
 
 `metrics.json` は**絶対に手で編集しない**。integrity ハッシュがずれて lint が落ちる。
-LB スコアだけは `tools/expctl lb <exp_id> --public <score>` で差せる。
+LB スコアだけは `uv run expctl lb <exp_id> --public <score>` で差せる。
 
 ## 欄の書き分け
 

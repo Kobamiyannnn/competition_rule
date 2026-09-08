@@ -1,0 +1,34 @@
+[project]
+name = "competition-rule"
+version = "0.1.0"
+description = "コンペ実験の記録と意思決定の基盤"
+readme = "README.md"
+# 実験の再現性がこの基盤の土台なので、Python の版も固定する。
+# 変えるときは .python-version も一緒に変える。
+requires-python = ">=3.11"
+dependencies = [
+    "pyyaml>=6.0",
+]
+
+[project.scripts]
+expctl = "expkit.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pyflakes>=3.0",
+]
+
+# コンペで使うライブラリはここに足さない。`uv add numpy pandas lightgbm` で
+# dependencies に入れる。何を使って実験したかが uv.lock に残り、
+# metrics.json がその指紋を記録する。
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["tools/expkit"]
+
+[tool.pytest.ini_options]
+testpaths = ["tools/tests"]
+pythonpath = ["tools/tests"]

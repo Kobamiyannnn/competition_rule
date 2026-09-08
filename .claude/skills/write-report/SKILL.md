@@ -14,7 +14,7 @@ description: 実験記録からレポートを組み立てる。本文は機械�
 ### 1. 記録が揃っているか確かめる
 
 ```
-tools/expctl lint
+uv run expctl lint
 ```
 
 全件が ok になってから作る。落ちている記録があるまま作ると、
@@ -58,7 +58,7 @@ tools/expctl lint
 ### 3. 生成する
 
 ```
-tools/expctl report
+uv run expctl report
 ```
 
 `reports/report.md` ができる。結論の欄が lint に落ちていれば

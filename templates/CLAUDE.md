@@ -5,9 +5,25 @@
 コンペ: TODO
 データ形式: TODO
 
+## Python は uv 越しに動かす
+
+このリポジトリは uv を前提にしている。`python` や `pip` を直接呼ばない。
+
+```bash
+uv run expctl status          # コマンド
+uv run pytest -q              # テスト
+uv run python src/run.py ...  # 任意のスクリプト
+uv add lightgbm               # ライブラリを足す
+```
+
+`uv add` で足したものは `uv.lock` に固定され、`metrics.json` がその指紋を記録する。
+`pip install` で入れたものは記録に残らず、その実験は再現できなくなる。
+
+uv が無いと記録の検査（hook）が走らない。無いなら先に入れる。
+
 ## 最初に読むもの
 
-作業を始める前に `tools/expctl status` を実行し、出力をそのまま読む。
+作業を始める前に `uv run expctl status` を実行し、出力をそのまま読む。
 要約しない。要約すると数値が落ちて評価語に置き換わる。
 
 ## 守ること
@@ -18,7 +34,7 @@
 integrity ハッシュがずれて lint が落ちる。
 
 - 実験の数値: 実験スクリプトから `expkit.metrics.write(...)`
-- LB スコア: `tools/expctl lb <exp_id> --public <score>`
+- LB スコア: `uv run expctl lb <exp_id> --public <score>`
 
 ### 記録に解釈を混ぜない
 
@@ -101,7 +117,7 @@ LB や CV の差が `competition.yaml` の `lb_noise`（CV なら fold の標準
 「解釈の再解釈」が、1つのセッションの中で起きている状態。
 **セッションの境界は、一次資料に戻ることを強制する装置。**
 
-切るコストはほぼ無い。SessionStart hook が `tools/expctl brief` の出力を
+切るコストはほぼ無い。SessionStart hook が `uv run expctl brief` の出力を
 自動で注入するので、新しいセッションは前のセッションが持っていた状態から始まる。
 
 ### 切る前にやること
@@ -154,13 +170,13 @@ compact を止めはしないが、指摘が出たら先に書き出す。
 ## 実験の1周
 
 ```
-tools/expctl status                          # 状態を見る
-tools/expctl idea list                       # 在庫から選ぶ
-tools/expctl decide new --type run           # 決定を書く
-tools/expctl new --tier ... --axes ... \     # 実験を立てる
+uv run expctl status                          # 状態を見る
+uv run expctl idea list                       # 在庫から選ぶ
+uv run expctl decide new --type run           # 決定を書く
+uv run expctl new --tier ... --axes ... \     # 実験を立てる
     --based-on ... --decision ... --idea ...
 # 実験を回す（スクリプトから expkit.metrics.write で metrics.json を書く）
 # record.yaml の記述欄を埋める
-tools/expctl lint <exp_id>                   # 規範を通す
-tools/expctl decide close <dec_id> --experiment <exp_id>   # 答え合わせ
+uv run expctl lint <exp_id>                   # 規範を通す
+uv run expctl decide close <dec_id> --experiment <exp_id>   # 答え合わせ
 ```

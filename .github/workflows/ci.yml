@@ -17,30 +17,32 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      # uv が唯一の入り口。pip でのフォールバックは用意しない。
+      # 用意すると「uv が無い環境でだけ挙動が違う」状態が生まれ、
+      # 再現性を土台にしているこの基盤では、その状態自体が害になる。
+      - name: uv を入れる
+        uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.11"
+          enable-cache: true
 
       - name: 依存を入れる
-        run: python -m pip install --quiet pyyaml pytest pyflakes
+        run: uv sync --locked
 
       - name: pyflakes
-        run: python -m pyflakes tools/expkit tools/hooks templates
+        run: uv run pyflakes tools/expkit tools/hooks templates
 
       - name: テスト
-        run: python -m pytest -q
+        run: uv run pytest -q
 
       # 規範の文書と実装がずれていないかを、テストとは別に明示して回す。
       # ここが落ちるときは、スキルの例文が linter に落ちる状態になっている。
       - name: スキルの例文と linter の一致
-        run: python -m pytest tools/tests/test_skill_examples.py -q
+        run: uv run pytest tools/tests/test_skill_examples.py -q
 
       # テンプレート同梱の設定ファイルが壊れていないか。
       - name: 同梱の設定が読めるか
         run: |
-          python - <<'PY'
-          import sys
-          sys.path.insert(0, "tools")
+          uv run python - <<'PY'
           import os
           os.environ["EXPKIT_ROOT"] = "."
           from expkit.config import load_competition, load_lint_config
@@ -57,6 +59,9 @@ jobs:
                 f"軸 {len(state.axis_ids)} 本")
           PY
 
+      - name: expctl が起動するか
+        run: uv run expctl --help > /dev/null && echo "ok"
+
       - name: シェルスクリプトの構文
         run: bash -n tools/bootstrap.sh && bash -n tools/githooks/pre-push
 
@@ -64,11 +69,11 @@ jobs:
       # hook を迂回して書かれた記録をここで捕まえる。
       - name: 記録の検査（初期化済みのリポジトリのみ）
         run: |
-          name=$(python -c "import yaml;print((yaml.safe_load(open('competition.yaml')) or {}).get('name',''))")
+          name=$(uv run python -c "import yaml;print((yaml.safe_load(open('competition.yaml')) or {}).get('name',''))")
           if [ "$name" = "TODO" ] || [ -z "$name" ]; then
             echo "テンプレートのまま（name=$name）。記録の検査は飛ばす。"
           else
-            python tools/expctl lint
+            uv run expctl lint
           fi
 
       # hook が JSON を受けて期待どおりの終了コードを返すか。

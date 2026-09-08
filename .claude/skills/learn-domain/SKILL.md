@@ -130,7 +130,7 @@ description: ドメイン知識を貯める。モデルを作る前はデータ�
 `implication` を1実験の粒度に割って在庫に入れる。
 
 ```
-tools/expctl idea add \
+uv run expctl idea add \
   --action "撮影装置IDを特徴量に加え、装置ごとの正規化と比較する。" \
   --axes features --tier explore --magnitude 0.004 \
   --evidence "d0007" --cost 0.6
@@ -143,7 +143,7 @@ tools/expctl idea add \
 ## 確かめる
 
 ```
-tools/expctl lint domain
+uv run expctl lint domain
 ```
 
 ## 通らないときによくある原因

@@ -57,6 +57,21 @@ def _git_info(root: Path) -> dict:
     }
 
 
+def _lock_info(root: Path) -> dict | None:
+    """uv.lock の指紋。どの依存で回した実験かを後から照合できるようにする。
+
+    packages の一覧だけだと推移的依存の版が分からない。lock の指紋があれば
+    「この実験と同じ依存で回っているか」を1つの値で確かめられる。
+    """
+    lock = root / "uv.lock"
+    if not lock.exists():
+        return None
+    return {
+        "file": "uv.lock",
+        "sha256": hashlib.sha256(lock.read_bytes()).hexdigest(),
+    }
+
+
 def _env_info() -> dict:
     packages: dict[str, str] = {}
     try:
@@ -101,7 +116,7 @@ def write(
         "written_at": _now(),
         "written_by": "expkit.metrics.write",
         "git": _git_info(r),
-        "env": _env_info(),
+        "env": {**_env_info(), "lock": _lock_info(r)},
         "seed": seed,
         "runtime_seconds": runtime_seconds,
         "config": config or {},

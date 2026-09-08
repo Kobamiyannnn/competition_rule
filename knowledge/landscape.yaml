@@ -24,7 +24,7 @@ task:
 #
 # **実際に開いていない URL を書かない。** 出典が捏造されると、
 # evidence の仕組み全体が意味を失う。開けなかったものは記録しない。
-# `tools/expctl landscape check` で URL の生存を確認できる。
+# `uv run expctl landscape check` で URL の生存を確認できる。
 sources: []
 # - id: s0001
 #   kind: paper            # paper / solution / discussion / dataset_doc / benchmark / blog

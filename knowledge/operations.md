@@ -25,9 +25,12 @@
 ## コマンド
 
 ```
-# TODO: 学習の回し方
-# 例: python3 src/run.py --exp exp0007        （所要 40 分）
-# 例: python3 src/submit.py --exp exp0007     （提出ファイル生成、2 分）
+# TODO: 学習の回し方。Python は uv 越しに動かす。
+# 例: uv run python src/run.py --exp exp0007      （所要 40 分）
+# 例: uv run python src/submit.py --exp exp0007   （提出ファイル生成、2 分）
+#
+# ライブラリを足すときは uv add。pip install は使わない。
+# uv.lock に残らないと、その実験は再現できない。
 ```
 
 ## 環境

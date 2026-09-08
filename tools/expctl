@@ -1,9 +1,0 @@
-#!/usr/bin/env python3
-"""expctl 実行口。リポジトリ直下から `tools/expctl ...` で呼ぶ。"""
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from expkit.cli import main  # noqa: E402
-
-raise SystemExit(main())

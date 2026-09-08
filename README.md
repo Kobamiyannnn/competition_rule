@@ -19,6 +19,19 @@
 | **セッション** | 引き継ぎがセッション開始時に自動注入される。compact 直後もファイルから実データが戻る |
 | **レポート** | 本文は記録から機械生成。人が書けるのは600字の結論だけ |
 
+## 必要なもの
+
+**[uv](https://docs.astral.sh/uv/)。** Python の実行と依存の管理は uv に一本化してある。
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh   # macOS / Linux
+brew install uv                                    # Homebrew
+```
+
+pip でのフォールバックは用意していない。用意すると「uv が無い環境でだけ挙動が違う」
+状態が生まれ、再現性を土台にしているこの基盤ではそれ自体が害になる。
+Python の版は `.python-version` で固定してあり、uv が必要な版を用意する。
+
 ## 始める
 
 ### GitHub から（推奨）
@@ -26,17 +39,18 @@
 このリポジトリを Settings → Template repository にしておくと、
 **Use this template** から履歴なし・`origin` が自分のリポジトリの状態で始められる。
 
-作ったら hook を有効にする。
+作ったら hook を有効にして依存を入れる。
 
 ```bash
 git config core.hooksPath tools/githooks
+uv sync
 ```
 
 ### clone から
 
 ```bash
 git clone <このリポジトリ> my-competition && cd my-competition
-bash tools/bootstrap.sh
+bash tools/bootstrap.sh                    # uv の確認・git の付け替え・uv sync まで
 git remote add origin <自分のリポジトリ>   # private を推奨
 ```
 
@@ -62,15 +76,15 @@ claude
 ## 実験の1周
 
 ```bash
-tools/expctl status                            # 状態を見る（要約させない）
-tools/expctl idea list                         # 在庫を gain/cost 順に見る
-tools/expctl decide new --type run             # 決定を台帳に書く
-tools/expctl new --tier explore --axes features \
+uv run expctl status                            # 状態を見る（要約させない）
+uv run expctl idea list                         # 在庫を gain/cost 順に見る
+uv run expctl decide new --type run             # 決定を台帳に書く
+uv run expctl new --tier explore --axes features \
     --based-on exp0003 --decision dec0002 --idea i0007
 # 実験を回す（スクリプトから expkit.metrics.write で metrics.json を書く）
 # record.yaml の記述欄を埋める
-tools/expctl lint exp0004                      # 規範を通す
-tools/expctl decide close dec0002 --experiment exp0004   # 機械で答え合わせ
+uv run expctl lint exp0004                      # 規範を通す
+uv run expctl decide close dec0002 --experiment exp0004   # 機械で答え合わせ
 ```
 
 phase は `p0_recon` → `p1_survey` → `p2_saturate` → `p3_ideas` の順に進む。
@@ -107,6 +121,9 @@ phase は `p0_recon` → `p1_survey` → `p2_saturate` → `p3_ideas` の順に�
 ## ファイル
 
 ```
+pyproject.toml             依存とコマンド定義。uv add でコンペのライブラリを足す
+uv.lock                    依存の固定。コミットする（再現性の土台）
+.python-version            Python の版の固定
 competition.yaml           コンペ定義。指標・ノイズ幅・phase・policy
 lint.yaml                  語彙規則と字数上限の上書き（任意）
 CLAUDE.md                  /init-competition が生成する作業規範
@@ -129,12 +146,11 @@ reports/
   report.md                expctl report が生成。手で編集しない
 
 tools/
-  expctl                   CLI
-  expkit/                  lint・ゲート・状態集計・引き継ぎ・レポート生成
+  expkit/                  lint・ゲート・状態集計・引き継ぎ・レポート生成（uv run expctl）
   hooks/                   記録の lint 強制、metrics.json 保護、引き継ぎ注入
   githooks/pre-push        テンプレートへの誤プッシュ防止
   bootstrap.sh             clone 直後の git 付け替え
-  tests/                   174件
+  tests/                   192件
 templates/                 実験スクリプトと CLAUDE.md の雛形
 ```
 
@@ -145,6 +161,10 @@ templates/                 実験スクリプトと CLAUDE.md の雛形
 
 `competition.yaml` の `policy` で在庫の下限、tier の窓と許容幅、CV 信頼性の閾値、
 的中率の上限、地固めの下限、誤り分析を強制する連続回数を変えられる。
+
+コンペで使うライブラリは `uv add numpy pandas lightgbm` のように足す。
+何を使って実験したかが `uv.lock` に残り、`metrics.json` がその指紋を記録するので、
+「この実験と同じ依存で回っているか」を後から1つの値で照合できる。
 
 ## 気をつけること
 
@@ -164,7 +184,7 @@ templates/                 実験スクリプトと CLAUDE.md の雛形
 ## テスト
 
 ```bash
-python3 -m pytest -q
+uv run pytest -q
 ```
 
 CI は pytest に加えて pyflakes、**スキルの例文と linter の判定の一致**、
