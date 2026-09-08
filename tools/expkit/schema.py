@@ -60,6 +60,22 @@ SOURCE_KINDS = (
     "blog",         # 実装記事
 )
 
+# 基盤への提案の種類。願望と不具合報告を分けるための型。
+PROPOSAL_KINDS = (
+    "missing_capability",  # 記録したいことに置き場所が無かった
+    "wrong_default",       # 既定値がこのコンペでは合わなかった
+    "unclear_norm",        # 規範の指示が曖昧で判断できなかった
+    "friction",            # 規範には従えるが、作業が不自然になった
+    "bug",                 # 明らかな誤動作
+)
+
+PROPOSAL_STATUS = ("open", "filed", "wontfix")
+
+PROPOSAL_FIELDS = {
+    "required": ("id", "kind", "at", "incident", "missing"),
+    "optional": ("workaround", "status", "filed_as", "created_at"),
+}
+
 # ドメインの事実がどこから来たか。自分で確かめたのか、読んだだけかを分ける。
 FACT_SOURCES = (
     "dataset_doc",        # データセットの公式説明

@@ -49,3 +49,7 @@ lightning_logs/
 
 # uv が作る仮想環境。uv.lock はコミットする（再現性の土台なので）。
 .venv/
+
+# 基盤そのものの摩擦の記録。実験の記録ではないので git には入れない。
+# expctl feedback がこれを読む。
+.expkit/
