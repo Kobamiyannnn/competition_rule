@@ -52,6 +52,7 @@ class State:
     competition: dict = dc_field(default_factory=dict)
     coverage: dict = dc_field(default_factory=dict)
     validation: dict = dc_field(default_factory=dict)
+    landscape: dict = dc_field(default_factory=dict)
     backlog: dict = dc_field(default_factory=dict)
     experiments: list[Experiment] = dc_field(default_factory=list)
     decisions: list[dict] = dc_field(default_factory=list)
@@ -83,6 +84,19 @@ class State:
             if isinstance(a, dict) and a.get("id") == axis_id:
                 return a
         return None
+
+    @property
+    def sources(self) -> list[dict]:
+        return [s for s in (self.landscape.get("sources") or []) if isinstance(s, dict)]
+
+    @property
+    def source_ids(self) -> set[str]:
+        return {str(s.get("id")) for s in self.sources if s.get("id")}
+
+    @property
+    def idea_ids(self) -> set[str]:
+        return {str(i.get("id")) for i in self.ideas
+                if isinstance(i, dict) and i.get("id")}
 
     @property
     def ideas(self) -> list[dict]:
@@ -159,6 +173,7 @@ def load_state(root: Path | None = None) -> State:
     state.competition = _load_yaml(r / "competition.yaml")
     state.coverage = _load_yaml(knowledge_dir(r) / "coverage.yaml")
     state.validation = _load_yaml(knowledge_dir(r) / "validation.yaml")
+    state.landscape = _load_yaml(knowledge_dir(r) / "landscape.yaml")
     state.backlog = _load_yaml(r / "ideas" / "backlog.yaml")
 
     if not state.coverage.get("axes"):

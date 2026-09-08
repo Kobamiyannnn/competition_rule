@@ -22,6 +22,7 @@ from .schema import (
     DIRECTIONS,
     HYPOTHESIS_STATUS,
     IDEA_STATUS,
+    SOURCE_KINDS,
     TIERS,
 )
 
@@ -131,6 +132,13 @@ def _texts(doc: dict, kind: str) -> list[tuple[str, str, str]]:
             push("record.hypothesis.falsification", f"hypothesis[{hid}].falsification", h.get("falsification"))
     elif kind == "idea":
         push("idea.action", "action", doc.get("action"))
+    elif kind == "landscape_task":
+        task = doc.get("task") or {}
+        for f in ("statement", "formulation", "why_hard"):
+            push(f"landscape.task.{f}", f"task.{f}", task.get(f))
+    elif kind == "landscape_source":
+        push("landscape.source.relevance", "relevance", doc.get("relevance"))
+        push("landscape.source.takeaway", "takeaway", doc.get("takeaway"))
     elif kind == "decision":
         push("decision.question", "question", doc.get("question"))
         for i, o in enumerate(doc.get("options") or []):
@@ -399,6 +407,123 @@ def _lint_waivers(doc: dict, report: Report) -> None:
         if len(reason) < 20:
             report.add(rule="waiver.thin_reason", severity="error", field=f"{where}.reason",
                        message="抜ける理由が20字未満。抜け道の乱用を防ぐため理由を書く。")
+
+
+# ---------------------------------------------------------------------------
+# landscape — 地固め
+#
+# knowledge/priors/ は汎用の打ち手で、どのコンペでも同じ内容になる。
+# ここはこのコンペ固有の外部知識。汎用の在庫からは汎用のアイデアしか出ないので、
+# ここが埋まるまで modeling 系の軸に進ませない。
+# ---------------------------------------------------------------------------
+
+def lint_landscape(
+    landscape: dict,
+    *,
+    cfg: dict,
+    policy: dict,
+    known_ideas: set[str] | None = None,
+) -> tuple[list[Report], Report]:
+    """出典ごとの検査と、地固め全体の検査を返す。"""
+    structure = cfg.get("structure", {})
+    url_pattern = structure.get("landscape_url_pattern") or r"^https?://\S+$"
+    min_takeaway = int(structure.get("landscape_takeaway_min_chars", 30))
+
+    whole = Report(target="knowledge/landscape.yaml")
+    task = landscape.get("task") or {}
+    for field in ("statement", "formulation", "why_hard"):
+        value = str(task.get(field) or "").strip()
+        if not value:
+            whole.add(rule="schema.missing", severity="error", field=f"task.{field}",
+                      message="空。何を解く問題なのかを書かないと、調査の的が定まらない。")
+    _lint_prose(landscape, "landscape_task", cfg, whole)
+
+    sources = list(landscape.get("sources") or [])
+    per_source: list[Report] = []
+    seen: set[str] = set()
+    kinds: set[str] = set()
+    transferred = 0
+
+    for n, src in enumerate(sources):
+        ident = src.get("id") if isinstance(src, dict) else None
+        report = Report(target=f"knowledge/landscape.yaml [{ident or f'#{n}'}]")
+        per_source.append(report)
+
+        if not isinstance(src, dict):
+            report.add(rule="schema.type", severity="error", field=f"sources[{n}]",
+                       message="出典の要素はマッピング。")
+            continue
+
+        for key in ("id", "kind", "title", "url", "relevance", "takeaway"):
+            if not str(src.get(key) or "").strip():
+                report.add(rule="schema.missing", severity="error", field=key,
+                           message="必須の欄が空。")
+
+        ident_s = str(src.get("id") or "")
+        if ident_s and ident_s in seen:
+            whole.add(rule="landscape.duplicate_id", severity="error", field="sources",
+                      message=f"ID が重複している: {ident_s}")
+        seen.add(ident_s)
+
+        kind = src.get("kind")
+        if kind is not None and kind not in SOURCE_KINDS:
+            report.add(rule="schema.enum", severity="error", field="kind",
+                       message=f"kind は {'/'.join(SOURCE_KINDS)} のいずれか。")
+        elif kind:
+            kinds.add(kind)
+
+        url = str(src.get("url") or "").strip()
+        if url and not re.match(url_pattern, url):
+            report.add(
+                rule="landscape.bad_url", severity="error", field="url",
+                message="URL の形になっていない。実際に開いた URL をそのまま書く。",
+            )
+
+        takeaway = str(src.get("takeaway") or "").strip()
+        if takeaway and _visible_len(takeaway) < min_takeaway:
+            report.add(
+                rule="landscape.takeaway_too_thin", severity="error", field="takeaway",
+                message=f"{_visible_len(takeaway)}字。{min_takeaway}字未満だと打ち手に移せない。"
+                        " 「良い結果を報告している」ではなく、何をどうするのかを書く。",
+            )
+
+        moved = src.get("transferred_to") or []
+        if moved:
+            transferred += 1
+        if known_ideas is not None:
+            for i in moved:
+                if i not in known_ideas:
+                    report.add(rule="link.idea_missing", severity="error",
+                               field="transferred_to",
+                               message=f"在庫に無いアイデアを指している: {i!r}")
+
+        _lint_prose(src, "landscape_source", cfg, report)
+
+    min_sources = int(policy.get("landscape_min_sources", 5))
+    min_kinds = int(policy.get("landscape_min_kinds", 2))
+    min_transferred = int(policy.get("landscape_min_transferred", 3))
+
+    if len(sources) < min_sources:
+        whole.add(
+            rule="landscape.too_few_sources", severity="error", field="sources",
+            message=f"出典が {len(sources)} 件。下限 {min_sources} 件。"
+                    " 手を動かす前に、この問題に対して世の中が何をやってきたかを調べる。",
+        )
+    if len(sources) >= min_sources and len(kinds) < min_kinds:
+        whole.add(
+            rule="landscape.one_kind_only", severity="error", field="sources",
+            message=f"出典の種類が {len(kinds)} 種類（下限 {min_kinds}）。"
+                    " 論文だけでは実装の勘所が分からず、解法だけでは原理が分からない。"
+                    f" 使える種類: {', '.join(SOURCE_KINDS)}",
+        )
+    if len(sources) >= min_sources and transferred < min_transferred:
+        whole.add(
+            rule="landscape.not_transferred", severity="error", field="sources",
+            message=f"在庫に移した出典が {transferred} 件（下限 {min_transferred}）。"
+                    " 調べただけで打ち手にしていない。"
+                    " `expctl idea add --evidence s0001` で移し、transferred_to に書き戻す。",
+        )
+    return per_source, whole
 
 
 # ---------------------------------------------------------------------------

@@ -18,6 +18,7 @@ from .config import load_lint_config
 from .gates import (
     calibration,
     policy,
+    recon_findings,
     conservatism_findings,
     current_phase,
     cv_trust,
@@ -26,7 +27,7 @@ from .gates import (
     gate_stop_decision,
     judge,
 )
-from .lint import lint_backlog, lint_decision, lint_idea, lint_record
+from .lint import lint_backlog, lint_decision, lint_idea, lint_landscape, lint_record
 from .paths import (
     decision_path,
     decisions_dir,
@@ -174,6 +175,13 @@ def cmd_lint(args: argparse.Namespace) -> int:
         reports.extend(per_idea)
         reports.append(whole)
 
+    def lint_the_landscape() -> None:
+        per_source, whole = lint_landscape(
+            state.landscape, cfg=cfg, policy=policy(state), known_ideas=state.idea_ids,
+        )
+        reports.extend(per_source)
+        reports.append(whole)
+
     if targets:
         for t in targets:
             # ファイルパスでも ID でも受ける（hook から呼ぶため）
@@ -192,6 +200,9 @@ def cmd_lint(args: argparse.Namespace) -> int:
                 if resolved.parent.name == "ideas":
                     lint_the_backlog()
                     continue
+                if resolved.name == "landscape.yaml":
+                    lint_the_landscape()
+                    continue
                 print(f"{t}: 記録でも決定でもないので検査しない。")
                 continue
             e = next((x for x in state.experiments if x.id == t), None)
@@ -200,6 +211,9 @@ def cmd_lint(args: argparse.Namespace) -> int:
                 continue
             if t in ("backlog", "ideas"):
                 lint_the_backlog()
+                continue
+            if t in ("landscape", "recon"):
+                lint_the_landscape()
                 continue
             dp = decision_path(t, root)
             if dp.exists():
@@ -214,6 +228,7 @@ def cmd_lint(args: argparse.Namespace) -> int:
             for f in sorted(decisions_dir(root).glob("*.yaml")):
                 lint_one_decision(_load_yaml(f), f.stem)
         lint_the_backlog()
+        lint_the_landscape()
 
     if not reports:
         print("検査対象が無い。")
@@ -249,6 +264,11 @@ def cmd_status(args: argparse.Namespace) -> int:
     print(f"{BOLD}phase{RESET}        {ph.get('id')}  {DIM}{ph.get('goal','')}{RESET}")
     print(f"{BOLD}指標実装{RESET}     verified={state.metric_verified}"
           + ("" if state.metric_verified else f"  {DIM}← ここが false の間は打ち切れない{RESET}"))
+    recon = recon_findings(state)
+    n_src = len(state.sources)
+    print(f"{BOLD}地固め{RESET}       "
+          + (f"済（出典 {n_src} 件）" if not recon
+             else f"{DIM}未 — 出典 {n_src} 件。modeling 系の軸に進めない{RESET}"))
     print(f"{BOLD}CV信頼性{RESET}     {trust.summary()}")
     print(f"{BOLD}実験{RESET}         {len(state.experiments)} 本   "
           f"{BOLD}決定{RESET} {len(state.decisions)} 件（決着 {cal.n} 件）")
@@ -277,7 +297,7 @@ def cmd_status(args: argparse.Namespace) -> int:
         mark = {"untouched": "未着手", "open": "進行中", "saturated": "飽和  ", "retired": "打切り"}[st]
         print(f"  {mark}  {a:<18} 実験 {n} 本")
 
-    warn = conservatism_findings(state) + gate_backlog(state)
+    warn = conservatism_findings(state) + gate_backlog(state) + recon
     if warn:
         print(f"\n{BOLD}指摘{RESET}")
         for f in warn:
@@ -566,6 +586,52 @@ def _mark_idea(root: Path, idea_id: str, *, status: str, experiment: str | None)
             return
 
 
+def cmd_landscape_check(args: argparse.Namespace) -> int:
+    """出典の URL が実在するかを確かめる。
+
+    捏造された出典が混ざると evidence の仕組み全体が意味を失うので、
+    機械で確かめられる部分だけでも確かめる。
+    """
+    import urllib.error
+    import urllib.request
+
+    state = load_state()
+    sources = state.sources
+    if not sources:
+        print("出典がまだ無い。")
+        return 0
+
+    bad = 0
+    for src in sources:
+        url = str(src.get("url") or "").strip()
+        ident = src.get("id", "?")
+        if not url:
+            print(f"{ident}: URL が無い")
+            bad += 1
+            continue
+        req = urllib.request.Request(url, method="HEAD", headers={"User-Agent": "expctl"})
+        try:
+            with urllib.request.urlopen(req, timeout=args.timeout) as resp:
+                print(f"{ident}: {resp.status} {url}")
+        except urllib.error.HTTPError as e:
+            # 405 は HEAD 非対応。到達はしているので生存とみなす。
+            if e.code in (403, 405):
+                print(f"{ident}: {e.code}（到達はした） {url}")
+            else:
+                print(f"{ident}: HTTP {e.code} {url}")
+                bad += 1
+        except Exception as e:  # noqa: BLE001 — ネットワークの失敗は種類を問わず報告する
+            print(f"{ident}: 到達できない（{type(e).__name__}） {url}")
+            bad += 1
+
+    if bad:
+        print(f"\n{bad} 件が確認できなかった。"
+              " 開けない出典は landscape から消す。実際に読んでいない出典を残さない。")
+        return 1
+    print(f"\n{len(sources)} 件すべて到達できた。")
+    return 0
+
+
 def cmd_idea_list(args: argparse.Namespace) -> int:
     state = load_state()
     ideas = state.ideas if args.all else state.open_ideas()
@@ -725,6 +791,12 @@ def build_parser() -> argparse.ArgumentParser:
     ir.add_argument("idea")
     ir.add_argument("--reason", required=True, help="なぜ捨てるのか。20字以上")
     ir.set_defaults(func=cmd_idea_retire)
+
+    ls = sub.add_parser("landscape", help="地固め（knowledge/landscape.yaml）")
+    lsub = ls.add_subparsers(dest="subcmd", required=True)
+    lc = lsub.add_parser("check", help="出典の URL が実在するかを確かめる")
+    lc.add_argument("--timeout", type=float, default=10.0)
+    lc.set_defaults(func=cmd_landscape_check)
 
     r = sub.add_parser("render", help="${metrics...} を実値に置いて記録を読む")
     r.add_argument("experiment")

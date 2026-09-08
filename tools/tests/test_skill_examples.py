@@ -15,6 +15,7 @@ from expkit.lint import Report, lint_prose_field
 
 LOG_EXPERIMENT = ".claude/skills/log-experiment/SKILL.md"
 WRITE_REPORT = ".claude/skills/write-report/SKILL.md"
+SURVEY = ".claude/skills/survey/SKILL.md"
 
 # (欄, 本文, 落ちるべきか, 出典)
 CASES = [
@@ -45,6 +46,27 @@ CASES = [
         "集約の単位をユーザから乱数グループに置き換えて同じ12列を作り、"
         "cv.mean が ${metrics.cv.std} を超えて下がらないなら、この仮説は誤り。",
         False, f"{LOG_EXPERIMENT} falsification 良い例",
+    ),
+    (
+        "landscape.task.formulation",
+        "不均衡二値分類。患者単位のグループ構造あり、ラベルは追跡打ち切りを含む。",
+        False, f"{SURVEY} formulation 良い例",
+    ),
+    (
+        "landscape.source.takeaway",
+        "患者単位の StratifiedGroupKFold で切り、陽性を含む患者を層化に使う。"
+        "画像単位で切ると CV が 0.05 楽観的になると報告している。",
+        False, f"{SURVEY} takeaway 良い例",
+    ),
+    (
+        "landscape.source.takeaway",
+        "この前処理がかなり効いたと報告されているので有望。",
+        True, f"{SURVEY} takeaway 悪い例（skill が禁じている書き方）",
+    ),
+    (
+        "idea.action",
+        "患者単位の StratifiedGroupKFold に切り替え、画像単位分割との CV-LB gap を比べる。",
+        False, f"{SURVEY} 在庫への転記 良い例",
     ),
     (
         "report.conclusion",
@@ -80,5 +102,6 @@ def test_examples_are_still_in_the_skill_files() -> None:
     """例文を書き換えたのにテストを直し忘れる事故を防ぐ。"""
     root = Path(__file__).resolve().parents[2]
     for path, marker in [(LOG_EXPERIMENT, "特徴量を見直して"),
-                         (WRITE_REPORT, "cv.mean を最も動かしたのは")]:
+                         (WRITE_REPORT, "cv.mean を最も動かしたのは"),
+                         (SURVEY, "StratifiedGroupKFold")]:
         assert marker in (root / path).read_text(encoding="utf-8"), path

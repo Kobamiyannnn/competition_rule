@@ -22,23 +22,35 @@ metric:
 lb_noise: 0.0
 
 # 現在の段階。expctl status が表示し、tier クォータの配分を決める。
-current_phase: p0_survey
+current_phase: p0_recon
 
 phases:
-  - id: p0_survey
-    goal: 評価指標の実装一致とCV戦略の確定。モデル族を意図的に雑に走査して掘る先を選ぶ。
+  - id: p0_recon
+    goal: 地固め。評価指標の実装一致、テストの作られ方の把握、そして
+          この問題に対して世の中が何をやってきたかの調査。手を動かす前に調べる。
+    tier_quota: {exploit: 0.0, explore: 1.0, moonshot: 0.0}
+    exit: metric.verified が true、knowledge/landscape.yaml が検証を通る
+  - id: p1_survey
+    goal: モデル族を意図的に雑に走査して、深く掘る先を選ぶ。
+          landscape で有力と分かったものから当てる。
     tier_quota: {exploit: 0.2, explore: 0.7, moonshot: 0.1}
-    exit: metric.verified が true、validation 軸が飽和、モデル族を3つ以上当てた
-  - id: p1_saturate
+    exit: モデル族を3つ以上当て、validation 軸が飽和
+  - id: p2_saturate
     goal: 選んだパイプラインの可動域を出し切る。ハイパラと既存軸を飽和させる。
     tier_quota: {exploit: 0.7, explore: 0.3, moonshot: 0.0}
     exit: hyperparameters と features が飽和宣言済み
-  - id: p2_ideas
+  - id: p3_ideas
     goal: 飽和した軸の外側へ。新しい打ち手を試せる立場に立っている。
     tier_quota: {exploit: 0.3, explore: 0.5, moonshot: 0.2}
     exit: 締切
 
 policy:
+  # 地固め（knowledge/landscape.yaml）に要る量。
+  # これを満たすまで、modeling 系の軸には進めない。
+  landscape_min_sources: 5      # 調べた出典の下限
+  landscape_min_kinds: 2        # 出典の種類の下限（論文だけ・解法だけにしない）
+  landscape_min_transferred: 3  # 在庫に移した出典の下限
+
   backlog_min_open: 8         # 未実行アイデアの下限。割ると次の実験に進めない
   tier_window: 10             # tier 比率を見る窓
   tier_quota_tolerance: 0.15  # 目標比率からこれ以上ずれたら次の tier を強制

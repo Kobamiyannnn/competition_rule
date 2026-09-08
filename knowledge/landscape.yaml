@@ -1,0 +1,39 @@
+# 地固め — このコンペ固有の外部知識。
+#
+# knowledge/priors/ は私（この基盤）が汎用の記憶から書いた打ち手で、
+# どのコンペでも同じ内容になる。汎用の在庫からは汎用のアイデアしか出ない。
+# ここは違う。**このコンペの問題に対して、世の中が何をやってきたか**を調べて置く場所。
+#
+# これが検証を通るまで、modeling 系の軸（features / model_family / objective /
+# hyperparameters / ensemble ...）には進めない。触れるのは
+# metric_fidelity / validation / data_leak だけ。手を動かす前に調べる。
+#
+# 埋め方は /survey スキルを使う。
+
+task:
+  # 何を予測するのか。データではなく問題を書く。1文。
+  statement: TODO
+  # ML としての定式化。既知の問題設定の名前で書く。
+  # 例: マルチラベル分類 / 順序回帰 / 時系列予測 / metric learning / セグメンテーション
+  formulation: TODO
+  # 何が難しいのか。ここが空だと調査の的が定まらず、
+  # 「一般的な良い手法」を集めただけの役に立たない landscape になる。
+  why_hard: TODO
+
+# 調べた出典。/survey が埋める。
+#
+# **実際に開いていない URL を書かない。** 出典が捏造されると、
+# evidence の仕組み全体が意味を失う。開けなかったものは記録しない。
+# `tools/expctl landscape check` で URL の生存を確認できる。
+sources: []
+# - id: s0001
+#   kind: paper            # paper / solution / discussion / dataset_doc / benchmark / blog
+#   title: ...
+#   url: https://...
+#   year: 2024
+#   accessed_at: 2026-09-07
+#   relevance: |
+#     なぜこのコンペに関係するか。task.formulation か why_hard との対応で書く。
+#   takeaway: |
+#     このコンペに移せる打ち手。具体的に。「良い結果を報告している」では移せない。
+#   transferred_to: []     # ideas/backlog.yaml に移した項目の ID

@@ -36,6 +36,8 @@ def _kind(path: Path) -> str | None:
         return "decision"
     if path.name == "backlog.yaml" and path.parent.name == "ideas":
         return "backlog"
+    if path.name == "landscape.yaml" and path.parent.name == "knowledge":
+        return "landscape"
     return None
 
 
@@ -58,7 +60,7 @@ def post(payload: dict) -> int:
     if path is None:
         return 0
     kind = _kind(path)
-    if kind not in ("record", "decision", "backlog"):
+    if kind not in ("record", "decision", "backlog", "landscape"):
         return 0
     if not path.exists():
         return 0
@@ -91,7 +93,17 @@ def post(payload: dict) -> int:
         return 0
 
     sys.stderr.write(buf.getvalue())
-    if kind == "backlog":
+    if kind == "landscape":
+        sys.stderr.write(
+            "\n地固めが検証を通っていない。"
+            " これが通るまで modeling 系の軸には進めない。\n"
+            "  - 出典は実際に開いた URL だけを書く（捏造すると evidence が意味を失う）\n"
+            "  - takeaway は30字以上で、何をどうするのかまで書く\n"
+            "  - 出典の種類を偏らせない（論文だけ・解法だけにしない）\n"
+            "  - 調べたら在庫に移して transferred_to に書き戻す\n"
+            "`tools/expctl landscape check` で URL の生存を確かめられる。\n"
+        )
+    elif kind == "backlog":
         sys.stderr.write(
             "\nこのアイデアは在庫として数えられない。"
             " 在庫の下限は「打ち手がない」と言わせないための仕組みなので、"

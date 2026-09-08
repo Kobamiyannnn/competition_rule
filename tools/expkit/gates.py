@@ -15,6 +15,9 @@ from dataclasses import dataclass
 from .state import Experiment, State, spearman
 
 DEFAULT_POLICY = {
+    "landscape_min_sources": 5,
+    "landscape_min_kinds": 2,
+    "landscape_min_transferred": 3,
     "backlog_min_open": 8,
     "backlog_min_axes": 3,         # 在庫が何軸に散っている必要があるか
     "tier_window": 10,
@@ -28,17 +31,23 @@ DEFAULT_POLICY = {
 
 DEFAULT_PHASES = [
     {
-        "id": "p0_survey",
-        "goal": "評価指標の実装一致とCV戦略の確定。モデル族を意図的に雑に走査して掘る先を選ぶ。",
+        "id": "p0_recon",
+        "goal": "地固め。評価指標の実装一致、テストの作られ方の把握、"
+                "この問題に対して世の中が何をやってきたかの調査。手を動かす前に調べる。",
+        "tier_quota": {"exploit": 0.0, "explore": 1.0, "moonshot": 0.0},
+    },
+    {
+        "id": "p1_survey",
+        "goal": "モデル族を意図的に雑に走査して、深く掘る先を選ぶ。",
         "tier_quota": {"exploit": 0.2, "explore": 0.7, "moonshot": 0.1},
     },
     {
-        "id": "p1_saturate",
+        "id": "p2_saturate",
         "goal": "選んだパイプラインの可動域を出し切る。ハイパラと既存軸を飽和させる。",
         "tier_quota": {"exploit": 0.7, "explore": 0.3, "moonshot": 0.0},
     },
     {
-        "id": "p2_ideas",
+        "id": "p3_ideas",
         "goal": "飽和した軸の外側へ。新しい打ち手を試せる立場に立っている。",
         "tier_quota": {"exploit": 0.3, "explore": 0.5, "moonshot": 0.2},
     },
@@ -104,6 +113,44 @@ def cv_trust(state: State) -> CvTrust:
 
 
 # ---------------------------------------------------------------------------
+# 地固め
+#
+# 汎用の打ち手（knowledge/priors/）だけを在庫の種にすると、
+# どのコンペでも同じ在庫になり、同じ実験しか出てこない。
+# このコンペ固有の外部知識が入るまで、modeling 系の軸に進ませない。
+# ---------------------------------------------------------------------------
+
+# 地固めが済んでいなくても触れる軸。手を動かすというより、前提を確かめる作業。
+RECON_ALLOWED_AXES = frozenset({"metric_fidelity", "validation", "data_leak"})
+
+
+def recon_done(state: State) -> bool:
+    return not recon_findings(state)
+
+
+def recon_findings(state: State) -> list[GateFinding]:
+    """地固めの不足を返す。空なら済んでいる。"""
+    from .config import load_lint_config
+    from .lint import lint_landscape
+
+    per_source, whole = lint_landscape(
+        state.landscape, cfg=load_lint_config(state.root),
+        policy=policy(state), known_ideas=state.idea_ids,
+    )
+    errors = list(whole.errors) + [f for r in per_source for f in r.errors]
+    if not errors:
+        return []
+
+    rules = sorted({f.rule for f in errors})
+    head = whole.errors[0].message if whole.errors else errors[0].message
+    return [GateFinding(
+        gate="recon.incomplete", severity="error",
+        message=f"地固めが済んでいない（{len(errors)} 件の不足）。{' '.join(head.split())}"
+                f" 詳細は `tools/expctl lint landscape`。落ちている規則: {', '.join(rules[:5])}",
+    )]
+
+
+# ---------------------------------------------------------------------------
 # 次の実験を出すときのゲート
 # ---------------------------------------------------------------------------
 
@@ -135,6 +182,19 @@ def gate_new_experiment(state: State, *, tier: str, axes: list[str]) -> list[Gat
                 message="competition.yaml の metric.verified が false。"
                         " 自前の指標実装が公式定義と一致することを示すまで、"
                         " metric_fidelity か validation 以外の軸に進まない。",
+            ))
+
+    # 地固めが済むまで modeling 系の軸に進まない。
+    # 調べる前に手を動かすと、汎用の打ち手を汎用の順序で試すだけになる。
+    if axes and not (set(axes) & RECON_ALLOWED_AXES):
+        recon = recon_findings(state)
+        if recon:
+            out.extend(recon)
+            out.append(GateFinding(
+                gate="recon.axis_blocked", severity="error",
+                message="地固めが済むまで触れるのは "
+                        f"{', '.join(sorted(RECON_ALLOWED_AXES))} だけ。"
+                        " `/survey` で knowledge/landscape.yaml を埋める。",
             ))
 
     # tier クォータ。phase ごとに配分が違う。
@@ -207,7 +267,8 @@ def gate_backlog(state: State) -> list[GateFinding]:
             gate="backlog.thin", severity="error",
             message=f"検証を通った未実行のアイデアが {len(good)} 件。下限 {minimum} 件。"
                     " 次の実験に進む前に ideas/backlog.yaml を補充する。"
-                    " 補充源は knowledge/priors/、公開解法、未着手の軸。",
+                    " 補充源は knowledge/landscape.yaml（このコンペ固有）、"
+                    " knowledge/priors/（汎用）、未着手の軸。",
         ))
 
     # 在庫全体の広がり。同じ発想の変奏で埋めさせない。
@@ -229,6 +290,14 @@ def gate_backlog(state: State) -> list[GateFinding]:
 
 def gate_stop_decision(state: State) -> list[GateFinding]:
     out: list[GateFinding] = []
+
+    # 調べていないなら、打ち手が無いのではなく知らないだけ。
+    for f in recon_findings(state):
+        out.append(GateFinding(
+            gate="stop.recon_incomplete", severity="error",
+            message="地固めが済んでいない。世の中がこの問題に何をやってきたかを"
+                    " 調べる前に打ち切らない。" + f.message,
+        ))
 
     if not state.metric_verified:
         out.append(GateFinding(

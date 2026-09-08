@@ -36,12 +36,15 @@ tools/expctl idea list
 `expected.magnitude / cost` の降順で出る。**上位から選ぶのが既定**。
 上位を飛ばすなら、決定の `rationale.reason` にその理由を書く。
 
-在庫が下限を割っているなら、選ぶ前に補充する。補充源は4つ。
+在庫が下限を割っているなら、選ぶ前に補充する。補充源は5つ。
 
-1. `knowledge/priors/` — 未消化の項目
-2. 未着手の軸 — `expctl status` に出ている
-3. 公開解法・ディスカッション・過去の類似コンペ
+1. **`knowledge/landscape.yaml`** — `/survey` で集めたこのコンペ固有の出典。
+   `takeaway` のうち在庫に移していないものが残っていないか見る
+2. `knowledge/priors/` — 汎用。未消化の項目
+3. 未着手の軸 — `expctl status` に出ている
 4. **未決着の仮説の反証条件** — そのまま実験の手順になる
+5. 追加の調査 — 1〜4 が尽きたら `/survey` をもう一度回す。
+   序盤に調べたときとは問題の見え方が変わっているので、違う出典が見つかる
 
 補充は `expctl idea add` で行う。入れる前に検証がかかる。
 
@@ -115,10 +118,13 @@ tools/expctl decide close <dec_id> --experiment <exp_id>
 
 1. `expctl status` の未着手の軸 — 触っていない軸が残っていないか
 2. `expctl idea list` — 在庫に何が残っているか
-3. `knowledge/priors/` — 未消化の項目があるか
-4. 未決着の仮説 — 反証条件がそのまま次の実験になる
-5. `knowledge/validation.yaml` の `test_construction.unknown` —
+3. `knowledge/landscape.yaml` — 在庫に移していない `takeaway` が残っていないか
+4. `knowledge/priors/` — 未消化の項目があるか
+5. 未決着の仮説 — 反証条件がそのまま次の実験になる
+6. `knowledge/validation.yaml` の `test_construction.unknown` —
    分かっていないことが残っているなら、それを調べるのが打ち手
+7. `/survey` をもう一度回す — 序盤とは問題の見え方が変わっているので、
+   同じ検索でも違う出典が目に入る
 
 本当に打ち切るなら `--type stop` で決定を立てる。
 ゲートが通らないなら、まだ打ち切る段階ではない。

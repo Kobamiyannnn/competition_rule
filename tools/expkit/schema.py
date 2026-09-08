@@ -48,6 +48,23 @@ IDEA_FIELDS = {
 
 IDEA_STATUS = ("open", "running", "done", "retired")
 
+# 地固めで集める出典の種類。1種類に偏らせないための enum。
+# 論文だけ集めても実装の勘所は分からず、解法だけ集めても原理が分からない。
+SOURCE_KINDS = (
+    "paper",        # 論文
+    "solution",     # 過去コンペの上位解法
+    "discussion",   # このコンペのディスカッション
+    "dataset_doc",  # データセットの公式説明
+    "benchmark",    # ベンチマークのリーダーボードや比較研究
+    "blog",         # 実装記事
+)
+
+LANDSCAPE_FIELDS = {
+    "task": ("statement", "formulation", "why_hard"),
+    "source_required": ("id", "kind", "title", "url", "relevance", "takeaway"),
+    "source_optional": ("year", "accessed_at", "transferred_to", "note"),
+}
+
 
 def record_template(exp_id: str, created_at: str) -> str:
     return f"""\

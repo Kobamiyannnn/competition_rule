@@ -35,14 +35,25 @@ integrity ハッシュがずれて lint が落ちる。
 「〜が効いている」「モデルが〜を捉えられていない」は、反証条件が書けない。
 消すか、観測に降ろすか、反証できる粒度まで割る。消すのは負けではない。
 
+### 調べる前に手を動かさない
+
+最初の phase は `p0_recon`（地固め）。`knowledge/landscape.yaml` が検証を
+通るまで、`metric_fidelity` / `validation` / `data_leak` 以外の軸には
+ゲートで進めない。埋めるのは `/survey`。
+
+`knowledge/priors/` は汎用の打ち手で、どのコンペでも同じ内容になる。
+**汎用の在庫からは汎用のアイデアしか出ない。** 上位との差は landscape で作る。
+
 ### 「打ち手がない」と書く前に
 
 順に確認する。ほとんどの場合、打ち手はある。
 
 1. `expctl status` の未着手の軸
 2. `expctl idea list` の在庫
-3. `knowledge/priors/` の未消化項目
-4. 未決着の仮説の反証条件（そのまま実験になる）
+3. `knowledge/landscape.yaml` の未消化の `takeaway`
+4. `knowledge/priors/` の未消化項目
+5. 未決着の仮説の反証条件（そのまま実験になる）
+6. `/survey` をもう一度回す
 
 在庫を補充するときは `expctl idea add`。入れる前に検証がかかるので、
 中身の薄い項目で数だけ満たすことはできない（出典と粒度と軸の広がりを見る）。
@@ -117,6 +128,7 @@ compact を止めはしないが、指摘が出たら先に書き出す。
 
 | 場面 | スキル |
 |---|---|
+| コンペを調べる（地固め） | `/survey` |
 | 実験を回し終えて記録を書く | `/log-experiment` |
 | 次に何を試すか決める | `/decide-next` |
 | レポートを作る | `/write-report` |

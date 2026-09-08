@@ -41,7 +41,36 @@ def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     )
     (tmp_path / "ideas" / "backlog.yaml").write_text(
         yaml.safe_dump({"ideas": valid_ideas(3)}, allow_unicode=True), encoding="utf-8")
+    (tmp_path / "knowledge" / "landscape.yaml").write_text(
+        yaml.safe_dump(valid_landscape(), allow_unicode=True), encoding="utf-8")
     return tmp_path
+
+
+def valid_landscape(n_sources: int = 5, n_transferred: int = 3) -> dict:
+    """検証を通る地固め。種類が偏ると landscape.one_kind_only に落ちる。"""
+    kinds = ["solution", "paper", "discussion", "benchmark", "dataset_doc"]
+    return {
+        "task": {
+            "statement": "患者の検査画像から、3か月後の再発の有無を予測する。",
+            "formulation": "不均衡二値分類。患者単位のグループ構造あり。",
+            "why_hard": "陽性が2%。同一患者から複数枚あり、患者をまたぐ分割をしないとリークする。",
+        },
+        "sources": [
+            {
+                "id": f"s{k:04d}",
+                "kind": kinds[(k - 1) % len(kinds)],
+                "title": f"出典 {k}",
+                "url": f"https://example.invalid/source/{k}",
+                "year": 2024,
+                "accessed_at": "2026-09-07",
+                "relevance": "同じ患者単位のグループ構造と、同程度の陽性割合を持つ。",
+                "takeaway": "患者単位の StratifiedGroupKFold で切り、"
+                            "陽性を含む患者を層化に使う。",
+                "transferred_to": [f"i{k:04d}"] if k <= n_transferred else [],
+            }
+            for k in range(1, n_sources + 1)
+        ],
+    }
 
 
 # 検証を通る在庫。軸が散っていないと backlog.too_narrow に落ちるので、

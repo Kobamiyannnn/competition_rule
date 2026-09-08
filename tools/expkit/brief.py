@@ -19,6 +19,7 @@ from .gates import (
     cv_trust,
     gate_backlog,
     policy,
+    recon_findings,
 )
 from .lint import lint_record
 from .paths import knowledge_dir
@@ -135,11 +136,15 @@ def _section_allowed(state: State) -> list[str]:
     total = sum(counts.values())
     quota = ph.get("tier_quota") or {}
 
+    recon = recon_findings(state)
     lines = [
         "## いま取れる手",
         "",
         f"- phase: **{ph.get('id')}** — {ph.get('goal', '')}",
         f"- 指標実装の検証: {'済' if state.metric_verified else '**未**（他の軸に進めない）'}",
+        "- 地固め: " + (f"済（出典 {len(state.sources)} 件）" if not recon else
+                        f"**未**（出典 {len(state.sources)} 件）。"
+                        "modeling 系の軸に進めない。`/survey` で埋める"),
         f"- CV の信頼性: {trust.summary()}",
     ]
 
@@ -171,7 +176,7 @@ def _section_allowed(state: State) -> list[str]:
         lines.append(f"- 決定の較正: hit {cal.hit} / miss {cal.miss} / "
                      f"inconclusive {cal.inconclusive}、的中率 {hr}")
 
-    warn = conservatism_findings(state) + gate_backlog(state)
+    warn = conservatism_findings(state) + gate_backlog(state) + recon
     if warn:
         lines += ["", "**指摘**", ""]
         lines += [f"- {' '.join(f.message.split())}" for f in warn]

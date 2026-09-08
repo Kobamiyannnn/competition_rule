@@ -18,6 +18,11 @@ limits:
   decision.rationale.reason: 200
   decision.outcome.note: 100
   idea.action: 150
+  landscape.task.statement: 150
+  landscape.task.formulation: 100
+  landscape.task.why_hard: 200
+  landscape.source.relevance: 200
+  landscape.source.takeaway: 250
   report.conclusion: 600
 
 # ---------------------------------------------------------------------------
@@ -52,6 +57,12 @@ field_profiles:
   decision.outcome.note: strict
   # アイデアは「何をするか」なので事実記述。良し悪しは expected が持つ。
   idea.action: strict
+  # 地固めは事実の記述。「有望そう」ではなく何が書いてあったかを書く。
+  landscape.task.statement: strict
+  landscape.task.formulation: strict
+  landscape.task.why_hard: interpretive
+  landscape.source.relevance: strict
+  landscape.source.takeaway: strict
   report.conclusion: strict
 
 # ---------------------------------------------------------------------------
@@ -262,6 +273,11 @@ structure:
     - decision.options.action
     - decision.question
     - idea.action
+    - landscape.task.statement
+    - landscape.task.formulation
+    - landscape.task.why_hard
+    - landscape.source.relevance
+    - landscape.source.takeaway
 
   # falsification が条件文の形になっているかの検査。
   # 条件節マーカーと観測可能マーカーの両方を含まないと error。
@@ -282,10 +298,16 @@ structure:
   #   2. evidence が出典を指している（priors / 実験ID / URL のいずれか）
   #   3. 在庫全体が複数の軸にまたがっている（同じ発想の変奏で埋めさせない）
   idea_action_min_chars: 20
+
+  # 地固めの検証。
+  # takeaway が短いと「良い結果を報告している」で終わり、打ち手に移せない。
+  landscape_takeaway_min_chars: 30
+  landscape_url_pattern: '^https?://[^\s]+$'
   idea_evidence_patterns:
     - 'priors/[\w./-]+#\w+'      # 事前知識ライブラリの項目
     - '\bexp\d{4}\b'            # このコンペで観測された実験
     - '\bdec\d{4}\b'            # 過去の決定
+    - '\bs\d{4}\b'              # 地固めで調べた出典（knowledge/landscape.yaml）
     - 'https?://'                 # 外部の出典
 
   falsification_observable_markers:

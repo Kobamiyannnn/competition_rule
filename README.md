@@ -43,6 +43,35 @@
 そこで自壊する。第二に、**反証条件がそのまま次の実験になる**。次の一手が
 エージェントの作文ではなく、記録から導かれる。
 
+## 調べる前に手を動かさせない仕組み
+
+同梱の `knowledge/priors/` は私が汎用の記憶から書いた打ち手で、
+**どのコンペでも同じ内容になる。汎用の在庫からは汎用のアイデアしか出ない。**
+それを順に試すだけの進行は、誰がやっても同じ結果にしかならない。
+
+だから最初の phase は `p0_recon`（地固め）にしてある。
+
+| 仕組み | 中身 |
+|---|---|
+| `knowledge/landscape.yaml` | このコンペ固有の外部知識。問題の定式化と、調べた出典 |
+| `/survey` スキル | 問題を既知の定式化に落とし、過去の上位解法・論文・討論を調べて記録する |
+| **recon ゲート** | 地固めが検証を通るまで `metric_fidelity` / `validation` / `data_leak` 以外の軸に進めない |
+| 出典の種類の下限 | 論文だけ・解法だけにさせない（既定2種類） |
+| 在庫への転記の下限 | 調べただけで打ち手にしていない状態を通さない（既定3件） |
+| `expctl landscape check` | 出典の URL が実在するか確かめる。捏造された出典を残さない |
+
+`stop` の決定も地固めが済むまで通らない。
+**調べていないなら、打ち手が無いのではなく知らないだけ。**
+
+phase はこの順に進む。
+
+```
+p0_recon     指標実装の一致・テストの作られ方・文献と過去解法の調査
+p1_survey    モデル族を意図的に雑に走査して掘る先を選ぶ
+p2_saturate  可動域を出し切る
+p3_ideas     飽和した軸の外側へ
+```
+
 ## 探索が縮むのを止める仕組み
 
 | 仕組み | 中身 |
@@ -163,6 +192,7 @@ tools/expctl decide close dec0002 --experiment exp0004   # 機械で答え合わ
 | スキル | 用途 |
 |---|---|
 | `/init-competition` | コンペ用に一度で立ち上げる |
+| `/survey` | 地固め。問題を定式化し、上位解法・論文・討論を調べて記録する |
 | `/log-experiment` | 実験記録の書き方。良い例と悪い例つき |
 | `/decide-next` | 次の一手の決め方。「打ち手がない」と感じたときの確認手順 |
 | `/write-report` | レポートの作り方。結論600字の書き方 |
@@ -180,11 +210,12 @@ experiments/exp0001/
 decisions/dec0001.yaml     意思決定の台帳。期待と実際を突き合わせる
 ideas/backlog.yaml         アイデア在庫。空にできない
 knowledge/
+  landscape.yaml           地固め。このコンペ固有の外部知識（/survey が埋める）
   coverage.yaml            探索の網羅マップと飽和判定
   validation.yaml          CV 戦略と、分かっていないことの台帳
   operations.md            回し方・環境の癖・踏んだ失敗。引き継ぎに載る
   cv_lb.md                 CV-LB 対応（expctl cvlb が生成）
-  priors/                  種別別の実績ある打ち手。在庫の補充源
+  priors/                  種別別の実績ある打ち手（汎用）。在庫の補充源
 reports/
   conclusion.md            人が書く唯一の欄。600字、lint あり
   report.md                expctl report が生成。手で編集しない
@@ -196,7 +227,7 @@ tools/
   expkit/                  lint・ゲート・状態集計・レポート生成
   hooks/guard.py           記録の lint 強制と metrics.json の保護
   hooks/session.py         引き継ぎの注入と compact 前の点検
-  tests/                   117件
+  tests/                   137件
 templates/
   experiment_runner.py     実験スクリプトの雛形
   CLAUDE.md                作業規範の雛形
@@ -212,6 +243,7 @@ templates/
 | `expctl lint [target]` | 記録と決定を検査。省略で全件 |
 | `expctl decide new/close` | 決定の作成と機械的な答え合わせ |
 | `expctl saturate <axis>` | 軸を飽和（または打ち切り）として宣言 |
+| `expctl landscape check` | 出典の URL が実在するか確かめる |
 | `expctl idea list` | 在庫を gain/cost 順に並べる |
 | `expctl idea add` | 在庫に足す。検証を通らないと入らない |
 | `expctl idea retire` | 在庫から捨てる。20字以上の理由が要る |
