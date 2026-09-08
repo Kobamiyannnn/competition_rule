@@ -13,7 +13,7 @@ from pathlib import Path
 
 import yaml
 
-from . import metrics as metrics_mod
+from . import events, metrics as metrics_mod
 from .config import load_lint_config
 from .gates import (
     calibration,
@@ -34,6 +34,8 @@ from .lint import (
     lint_domain,
     lint_idea,
     lint_landscape,
+    lint_proposal,
+    lint_proposals,
     lint_record,
 )
 from .paths import (
@@ -75,14 +77,28 @@ def _dump_yaml(path: Path, doc: dict) -> None:
     )
 
 
-def _print_gates(findings: list, *, header: str) -> bool:
-    """error が1件でもあれば True（＝止める）。"""
+def _print_gates(
+    findings: list, *, header: str, root: Path | None = None,
+    command: str = "", forced: bool = False,
+) -> bool:
+    """error が1件でもあれば True（＝止める）。
+
+    止めた事実を .expkit/events.jsonl に残す。
+    人が素直に従ったゲートは記録に何も残さないので、
+    そのままではゲートの重さが測れない。
+    """
     if not findings:
         return False
     print(f"{BOLD}{header}{RESET}")
     for f in findings:
         print(f.format())
-    return any(f.severity == "error" for f in findings)
+    blocked = any(f.severity == "error" for f in findings)
+    if blocked and root is not None:
+        for f in findings:
+            if f.severity == "error":
+                events.record(root, "gate_blocked", gate=f.gate,
+                              command=command, forced=forced)
+    return blocked
 
 
 # ---------------------------------------------------------------------------
@@ -101,11 +117,15 @@ def cmd_new(args: argparse.Namespace) -> int:
         return 2
 
     findings = gate_new_experiment(state, tier=args.tier, axes=axes)
-    blocked = _print_gates(findings, header="ゲート判定")
+    blocked = _print_gates(findings, header="ゲート判定", root=root,
+                           command="new", forced=args.force)
     if blocked and not args.force:
         print("\n実験を作らずに終了した。上の指摘に対処するか --force で押し切る"
               "（押し切った事実は record に残る）。", file=sys.stderr)
         return 1
+    if blocked and args.force:
+        print(f"{DIM}ゲートを押し切った。基盤の側に問題があるなら"
+              f" `uv run expctl propose` で残す。{RESET}")
 
     exp_id = args.id or _next_id(experiments_dir(root), "exp")
     path = record_path(exp_id, root)
@@ -191,6 +211,14 @@ def cmd_lint(args: argparse.Namespace) -> int:
         reports.extend(per_fact)
         reports.append(whole)
 
+    def lint_the_proposals() -> None:
+        per_item, whole = lint_proposals(
+            state.proposals, cfg=cfg,
+            known_experiments=exp_ids, known_decisions=state.decision_ids,
+        )
+        reports.extend(per_item)
+        reports.append(whole)
+
     def lint_the_landscape() -> None:
         per_source, whole = lint_landscape(
             state.landscape, cfg=cfg, policy=policy(state), known_ideas=state.idea_ids,
@@ -222,6 +250,9 @@ def cmd_lint(args: argparse.Namespace) -> int:
                 if resolved.name == "domain.yaml":
                     lint_the_domain()
                     continue
+                if resolved.name == "proposals.yaml":
+                    lint_the_proposals()
+                    continue
                 print(f"{t}: 記録でも決定でもないので検査しない。")
                 continue
             e = next((x for x in state.experiments if x.id == t), None)
@@ -239,6 +270,9 @@ def cmd_lint(args: argparse.Namespace) -> int:
             if t == "domain":
                 lint_the_domain()
                 continue
+            if t in ("proposals", "feedback"):
+                lint_the_proposals()
+                continue
             dp = decision_path(t, root)
             if dp.exists():
                 lint_one_decision(_load_yaml(dp), t)
@@ -254,6 +288,7 @@ def cmd_lint(args: argparse.Namespace) -> int:
         lint_the_backlog()
         lint_the_landscape()
         lint_the_domain()
+        lint_the_proposals()
 
     if not reports:
         print("検査対象が無い。")
@@ -264,6 +299,10 @@ def cmd_lint(args: argparse.Namespace) -> int:
         if r.findings or args.verbose:
             print(r.format())
         n_err += len(r.errors)
+        # どの規則がどこで止めたかを残す。waive されずに直された分は
+        # 記録に痕跡が残らないので、ここで拾わないと規則の当たり外れが測れない。
+        for f in r.errors:
+            events.record(root, "lint_blocked", rule=f.rule, target=r.target)
 
     total = len(reports)
     if n_err:
@@ -428,7 +467,8 @@ def cmd_decide_new(args: argparse.Namespace) -> int:
 
     if args.type == "stop":
         findings = gate_stop_decision(state)
-        blocked = _print_gates(findings, header="打ち切りゲート")
+        blocked = _print_gates(findings, header="打ち切りゲート", root=root,
+                               command="decide new --type stop", forced=args.force)
         if blocked and not args.force:
             print("\n打ち切りの決定は作らなかった。"
                   " 「打ち手がない」ではなく、上のどれかがまだ残っている。", file=sys.stderr)
@@ -620,6 +660,60 @@ def _mark_idea(root: Path, idea_id: str, *, status: str, experiment: str | None)
                 i["experiment"] = experiment
             _dump_yaml(path, backlog)
             return
+
+
+def _proposals_path(root: Path) -> Path:
+    return root / "feedback" / "proposals.yaml"
+
+
+def cmd_propose(args: argparse.Namespace) -> int:
+    """基盤そのものへの改善提案を残す。
+
+    実際に起きた出来事に紐づいていない提案は願望であって、再設計の材料にならない。
+    だから --at を必須にし、実在する実験か決定を指しているかを検証する。
+    """
+    root = repo_root()
+    state = load_state(root)
+    cfg = load_lint_config(root)
+
+    doc = _load_yaml(_proposals_path(root)) if _proposals_path(root).exists() else {}
+    existing = list(doc.get("proposals") or [])
+
+    n = 0
+    for p in existing:
+        ident = str(p.get("id") or "") if isinstance(p, dict) else ""
+        if ident.startswith("p") and ident[1:].isdigit():
+            n = max(n, int(ident[1:]))
+
+    proposal = {
+        "id": args.id or f"p{n + 1:04d}",
+        "created_at": _now(),
+        "kind": args.kind,
+        "at": [a.strip() for a in args.at.split(",") if a.strip()],
+        "incident": args.incident,
+        "missing": args.missing,
+        "workaround": args.workaround or "",
+        "status": "open",
+        "filed_as": None,
+    }
+
+    report = lint_proposal(
+        proposal, cfg=cfg, index=0,
+        known_experiments=state.experiment_ids, known_decisions=state.decision_ids,
+    )
+    if report.errors:
+        print(report.format())
+        print("\n提案を残さなかった。"
+              " 具体的な場面に紐づかない提案は願望であって、再設計の材料にならない。",
+              file=sys.stderr)
+        return 1
+
+    doc.setdefault("proposals", []).append(proposal)
+    _proposals_path(root).parent.mkdir(parents=True, exist_ok=True)
+    _dump_yaml(_proposals_path(root), doc)
+    print(f"{proposal['id']} を feedback/proposals.yaml に残した。")
+    print("コンペが終わったら `uv run expctl feedback --issue` でまとめて出す。")
+    return 0
 
 
 def cmd_landscape_check(args: argparse.Namespace) -> int:
@@ -833,6 +927,25 @@ def build_parser() -> argparse.ArgumentParser:
     lc = lsub.add_parser("check", help="出典の URL が実在するかを確かめる")
     lc.add_argument("--timeout", type=float, default=10.0)
     lc.set_defaults(func=cmd_landscape_check)
+
+    pr = sub.add_parser("propose", help="基盤そのものへの改善提案を残す")
+    pr.add_argument("--kind", required=True,
+                    choices=("missing_capability", "wrong_default", "unclear_norm",
+                             "friction", "bug"))
+    pr.add_argument("--at", required=True,
+                    help="起きた実験か決定の ID をカンマ区切りで（exp0012,dec0005）")
+    pr.add_argument("--incident", required=True, help="何が起きたか。40字以上")
+    pr.add_argument("--missing", required=True, help="基盤の側に何が無かったか")
+    pr.add_argument("--workaround", default="", help="どう回避したか")
+    pr.add_argument("--id", default=None)
+    pr.set_defaults(func=cmd_propose)
+
+    fb = sub.add_parser("feedback", help="基盤へのフィードバックを記録から組み立てる")
+    fb.add_argument("--issue", action="store_true",
+                    help="テンプレートリポジトリの Issue に貼る形で出す")
+    fb.add_argument("--out", default=None)
+    from .feedback import cmd_feedback
+    fb.set_defaults(func=cmd_feedback)
 
     r = sub.add_parser("render", help="${metrics...} を実値に置いて記録を読む")
     r.add_argument("experiment")

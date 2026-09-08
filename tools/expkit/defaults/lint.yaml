@@ -26,6 +26,9 @@ limits:
   domain.fact.statement: 150
   domain.fact.implication: 200
   domain.fact.evidence: 250
+  proposal.incident: 300
+  proposal.missing: 200
+  proposal.workaround: 200
   report.conclusion: 600
 
 # ---------------------------------------------------------------------------
@@ -70,6 +73,10 @@ field_profiles:
   domain.fact.statement: strict
   domain.fact.implication: interpretive
   domain.fact.evidence: strict
+  # 提案は「何が起きたか」の記述。願望を書く欄ではない。
+  proposal.incident: strict
+  proposal.missing: interpretive
+  proposal.workaround: strict
   report.conclusion: strict
 
 # ---------------------------------------------------------------------------
@@ -288,6 +295,9 @@ structure:
     - domain.fact.statement
     - domain.fact.implication
     - domain.fact.evidence
+    - proposal.incident
+    - proposal.missing
+    - proposal.workaround
 
   # falsification が条件文の形になっているかの検査。
   # 条件節マーカーと観測可能マーカーの両方を含まないと error。
@@ -316,6 +326,10 @@ structure:
   # ドメイン知識の検証。
   # implication が書けない事実は雑学で、台帳に置く意味がない。
   domain_implication_min_chars: 25
+
+  # 提案の検証。
+  # incident が短いと「使いにくかった」で終わり、再設計の材料にならない。
+  proposal_incident_min_chars: 40
   # confirmed を名乗るには、他人が再確認できる形の evidence が要る。
   domain_confirmed_evidence_patterns:
     - '\bexp\d{4}\b'            # 確認に使った実験

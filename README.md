@@ -117,6 +117,8 @@ phase は `p0_recon` → `p1_survey` → `p2_saturate` → `p3_ideas` の順に�
 | `expctl table` | 実験一覧を metrics から生成 |
 | `expctl render <exp>` | `${...}` を実値に置いて記録を読む |
 | `expctl report` | レポートを組み立てる |
+| `expctl propose` | 基盤そのものへの改善提案を残す（実際に起きた場面への紐づけが必須） |
+| `expctl feedback` | 基盤へのフィードバックを記録から組み立てる（`--issue` で貼る形） |
 
 ## ファイル
 
@@ -132,6 +134,7 @@ experiments/exp0001/
   record.yaml              記述欄。lint がかかる
   metrics.json             機械しか書かない。sha256 で守る
 decisions/dec0001.yaml     意思決定の台帳。期待と実際を突き合わせる
+feedback/proposals.yaml    基盤への改善提案。実際に起きた場面への紐づけが必須
 ideas/backlog.yaml         アイデア在庫。空にできない
 knowledge/
   landscape.yaml           地固め。何をやればいいか（/survey が埋める）
@@ -150,7 +153,7 @@ tools/
   hooks/                   記録の lint 強制、metrics.json 保護、引き継ぎ注入
   githooks/pre-push        テンプレートへの誤プッシュ防止
   bootstrap.sh             clone 直後の git 付け替え
-  tests/                   192件
+  tests/                   211件
 templates/                 実験スクリプトと CLAUDE.md の雛形
 ```
 
@@ -176,6 +179,13 @@ templates/                 実験スクリプトと CLAUDE.md の雛形
 **抜け道は記録に残る。** 語彙規則は `lint_waived`（規則名と20字以上の理由）、
 ゲートは `--force`（押し切った内容が `record.yaml` に残る）で抜けられる。
 反証条件・改竄検知・スキーマ・参照解決の4つは抜けられない。
+
+**基盤が邪魔をしたら記録する。** ゲートを `--force` で押し切った、`lint_waived` を
+使った、記録したいことに置き場所が無かった — そういう場面は
+`uv run expctl propose` で残す。`--at` で実際の実験か決定に紐づけるのが必須で、
+紐づかない提案は願望として弾かれる。コンペが終わったら
+`uv run expctl feedback --issue` が測定値と提案をまとめる。
+コンペのデータは含まないので、そのまま公開リポジトリに貼れる。
 
 **この基盤は1コンペも回さずに作った。** 語彙規則の誤検知率、各種の下限と閾値は
 すべて当て推量。[`docs/open-questions.md`](docs/open-questions.md) に、

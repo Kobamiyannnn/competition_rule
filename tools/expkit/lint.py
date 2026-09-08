@@ -24,6 +24,8 @@ from .schema import (
     DIRECTIONS,
     HYPOTHESIS_STATUS,
     IDEA_STATUS,
+    PROPOSAL_KINDS,
+    PROPOSAL_STATUS,
     SOURCE_KINDS,
     TIERS,
 )
@@ -138,6 +140,10 @@ def _texts(doc: dict, kind: str) -> list[tuple[str, str, str]]:
         task = doc.get("task") or {}
         for f in ("statement", "formulation", "why_hard"):
             push(f"landscape.task.{f}", f"task.{f}", task.get(f))
+    elif kind == "proposal":
+        push("proposal.incident", "incident", doc.get("incident"))
+        push("proposal.missing", "missing", doc.get("missing"))
+        push("proposal.workaround", "workaround", doc.get("workaround"))
     elif kind == "domain_fact":
         push("domain.fact.statement", "statement", doc.get("statement"))
         push("domain.fact.evidence", "evidence", doc.get("evidence"))
@@ -413,6 +419,112 @@ def _lint_waivers(doc: dict, report: Report) -> None:
         if len(reason) < 20:
             report.add(rule="waiver.thin_reason", severity="error", field=f"{where}.reason",
                        message="抜ける理由が20字未満。抜け道の乱用を防ぐため理由を書く。")
+
+
+# ---------------------------------------------------------------------------
+# proposal — 基盤そのものへの改善提案
+#
+# 願望と不具合報告を分けるのが目的。
+# 「あると便利」は再設計の材料にならないが、
+# 「exp0012 でこうしたかったが置き場所が無かった」は材料になる。
+# だから実際に起きた出来事（at）への紐づけを必須にする。
+# ---------------------------------------------------------------------------
+
+def lint_proposal(
+    proposal: dict,
+    *,
+    cfg: dict,
+    index: int,
+    known_experiments: set[str] | None = None,
+    known_decisions: set[str] | None = None,
+) -> Report:
+    ident = proposal.get("id") if isinstance(proposal, dict) else None
+    report = Report(target=f"feedback/proposals.yaml [{ident or f'#{index}'}]")
+
+    if not isinstance(proposal, dict):
+        report.add(rule="schema.type", severity="error", field=f"proposals[{index}]",
+                   message="提案の要素はマッピング。")
+        return report
+
+    for key in ("id", "kind", "incident", "missing"):
+        if not str(proposal.get(key) or "").strip():
+            report.add(rule="schema.missing", severity="error", field=key,
+                       message="必須の欄が空。")
+
+    kind = proposal.get("kind")
+    if kind is not None and kind not in PROPOSAL_KINDS:
+        report.add(rule="schema.enum", severity="error", field="kind",
+                   message=f"kind は {'/'.join(PROPOSAL_KINDS)} のいずれか。")
+
+    status = proposal.get("status", "open")
+    if status not in PROPOSAL_STATUS:
+        report.add(rule="schema.enum", severity="error", field="status",
+                   message=f"status は {'/'.join(PROPOSAL_STATUS)} のいずれか。")
+
+    # ここが質を決める。実際の出来事に紐づいていない提案は願望であって、
+    # 再設計の材料にならない。
+    at = proposal.get("at") or []
+    if not at:
+        report.add(
+            rule="proposal.not_grounded", severity="error", field="at",
+            message="起きた実験か決定の ID が無い。"
+                    " 具体的な場面に紐づかない提案は願望であって、再設計の材料にならない。"
+                    " 思いついただけなら書かない。",
+        )
+    for ref in at:
+        ref_s = str(ref)
+        if known_experiments is not None and ref_s.startswith("exp")                 and ref_s not in known_experiments:
+            report.add(rule="link.experiment_missing", severity="error", field="at",
+                       message=f"存在しない実験: {ref_s}")
+        if known_decisions is not None and ref_s.startswith("dec")                 and ref_s not in known_decisions:
+            report.add(rule="link.decision_missing", severity="error", field="at",
+                       message=f"存在しない決定: {ref_s}")
+        if not (ref_s.startswith("exp") or ref_s.startswith("dec")):
+            report.add(rule="proposal.bad_reference", severity="error", field="at",
+                       message=f"実験（exp0001）か決定（dec0001）の ID で書く: {ref_s!r}")
+
+    structure = cfg.get("structure", {})
+    min_incident = int(structure.get("proposal_incident_min_chars", 40))
+    incident = str(proposal.get("incident") or "").strip()
+    if incident and _visible_len(incident) < min_incident:
+        report.add(
+            rule="proposal.incident_too_thin", severity="error", field="incident",
+            message=f"{_visible_len(incident)}字。{min_incident}字未満。"
+                    " 「使いにくかった」で終わらせず、何をしようとして何が起きたかを書く。",
+        )
+
+    if status == "filed" and not str(proposal.get("filed_as") or "").strip():
+        report.add(rule="schema.missing", severity="error", field="filed_as",
+                   message="filed にするなら、投げた先の URL を書く。")
+
+    _lint_prose(proposal, "proposal", cfg, report)
+    return report
+
+
+def lint_proposals(
+    doc: dict,
+    *,
+    cfg: dict,
+    known_experiments: set[str] | None = None,
+    known_decisions: set[str] | None = None,
+) -> tuple[list[Report], Report]:
+    proposals = list(doc.get("proposals") or [])
+    per_item = [
+        lint_proposal(p, cfg=cfg, index=n, known_experiments=known_experiments,
+                      known_decisions=known_decisions)
+        for n, p in enumerate(proposals)
+    ]
+    whole = Report(target="feedback/proposals.yaml")
+    seen: set[str] = set()
+    for p in proposals:
+        if not isinstance(p, dict):
+            continue
+        ident = str(p.get("id") or "")
+        if ident and ident in seen:
+            whole.add(rule="proposal.duplicate_id", severity="error", field="proposals",
+                      message=f"ID が重複している: {ident}")
+        seen.add(ident)
+    return per_item, whole
 
 
 # ---------------------------------------------------------------------------
