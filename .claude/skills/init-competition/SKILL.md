@@ -6,14 +6,15 @@ description: コンペ用のリポジトリを一度で立ち上げる。competi
 # コンペの初期設定
 
 このリポジトリを、特定のコンペで実際に回せる状態にする。
-終わったときに揃っているのは次の6つ。
+終わったときに揃っているのは次の7つ。
 
 1. `competition.yaml` — 指標・ノイズ幅・phase・policy
 2. `knowledge/coverage.yaml` — このコンペに合わせた探索の軸
 3. `knowledge/validation.yaml` — テストの作られ方について分かっていること
-4. `knowledge/landscape.yaml` — 地固め。このコンペ固有の外部知識
-5. `ideas/backlog.yaml` — `policy.backlog_min_open` 以上の未実行アイデア
-6. `CLAUDE.md` — 以降のセッションが規範に従うための指示
+4. `knowledge/landscape.yaml` — 地固め。何をやればいいか（手法の調査）
+5. `knowledge/domain.yaml` — 地固め。何が本当か（対象そのものの性質）
+6. `ideas/backlog.yaml` — `policy.backlog_min_open` 以上の未実行アイデア
+7. `CLAUDE.md` — 以降のセッションが規範に従うための指示
 
 **すぐに実験を回し始めない。** 最初の phase は `p0_recon`（地固め）で、
 指標実装の検証と調査が済むまで modeling 系の軸にはゲートで進めない。
@@ -109,12 +110,33 @@ tools/expctl lint landscape
 tools/expctl landscape check
 ```
 
-### 6. アイデア在庫を仕込む
+### 6. ドメイン知識を貯め始める
 
-補充源は2つある。**両方から入れる。**
+```
+/learn-domain
+```
 
-1. `knowledge/landscape.yaml` — このコンペ固有。`/survey` で集めた出典の `takeaway`
-2. `knowledge/priors/` — 汎用。`README.md` と `common.md`、データ形式に対応するファイル
+（`/learn-domain` を呼ぶ。データ観察の節だけを使う。）
+
+`landscape` が「何をやればいいか」なら、こちらは「**何が本当か**」。
+1行が何を表すか、目的変数の分布、欠損の構造、時間と場所の分かれ方、
+ありえない値。**モデルが無くても実データを見れば確かめられる。**
+
+`confidence` を必ず付ける。自分で確かめたものだけ `confirmed`、
+読んだだけは `likely`、思っただけは `assumed`。
+下限は事実5件、うち自分で確かめたもの2件。
+
+```
+tools/expctl lint domain
+```
+
+### 7. アイデア在庫を仕込む
+
+補充源は3つある。**全部から入れる。**
+
+1. `knowledge/landscape.yaml` — `/survey` で集めた出典の `takeaway`
+2. `knowledge/domain.yaml` — 6 で貯めた事実の `implication`
+3. `knowledge/priors/` — 汎用。`README.md` と `common.md`、データ形式に対応するファイル
 
 `policy.backlog_min_open`（既定8件）以上を `ideas/backlog.yaml` に写す。
 landscape 由来を最低3件は入れる（`landscape_min_transferred`）。
@@ -145,7 +167,7 @@ tools/expctl idea add \
 順序は `expected.magnitude / cost` の降順になるよう意識する。
 `tools/expctl idea list` で確認できる。
 
-### 7. 最初の実験を立てる
+### 8. 最初の実験を立てる
 
 最初の実験は**必ず** `metric_fidelity` 軸にする。
 
@@ -163,19 +185,19 @@ tools/expctl new --tier explore --axes metric_fidelity
 ここが済むまで、他の軸の実験はゲートで止まる。これは意図した挙動なので、
 `--force` で回避しない。地固め（5）も同じゲートを持っている。
 
-### 8. CLAUDE.md を書く
+### 9. CLAUDE.md を書く
 
 `templates/CLAUDE.md` を `CLAUDE.md` としてコピーし、コンペ名と
 データ形式に合わせて具体化する。以降のセッションはこれを読んで規範に従う。
 
-### 9. 確認する
+### 10. 確認する
 
 ```
 tools/expctl status
 ```
 
 phase・指標検証・網羅・在庫が想定通りか見る。
-在庫が下限を割っていたら 6 に戻る。
+在庫が下限を割っていたら 7 に戻る。
 
 ## この初期設定で守ること
 
@@ -184,7 +206,10 @@ phase・指標検証・網羅・在庫が想定通りか見る。
 - **`metric.verified` を先に true にしない。** ここが検証の土台。
 - **在庫を8件未満で終わらせない。** 在庫が薄いと、序盤から打ち手が尽きた
   ように見えて保守化する。
-- **地固めを飛ばして実験に入らない。** 5 を飛ばすと、`priors/` の汎用な
+- **地固めを飛ばして実験に入らない。** 5 と 6 を飛ばすと、`priors/` の汎用な
   打ち手を順に試すだけの進行になる。それは誰がやっても同じ結果にしかならない。
+- **確かめていないことを `confirmed` と書かない。** 未検証の仮定が前提として
+  使われるのが「弱い根拠で打ち切る」の正体。`assumed` と書けば、
+  残っている限り打ち切りゲートが止めてくれる。
 - **開いていない URL を landscape に書かない。** 出典が捏造されると、
   `evidence` を要求している仕組み全体が意味を失う。

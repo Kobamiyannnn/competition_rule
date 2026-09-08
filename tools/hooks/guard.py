@@ -38,6 +38,8 @@ def _kind(path: Path) -> str | None:
         return "backlog"
     if path.name == "landscape.yaml" and path.parent.name == "knowledge":
         return "landscape"
+    if path.name == "domain.yaml" and path.parent.name == "knowledge":
+        return "domain"
     return None
 
 
@@ -60,7 +62,7 @@ def post(payload: dict) -> int:
     if path is None:
         return 0
     kind = _kind(path)
-    if kind not in ("record", "decision", "backlog", "landscape"):
+    if kind not in ("record", "decision", "backlog", "landscape", "domain"):
         return 0
     if not path.exists():
         return 0
@@ -93,7 +95,16 @@ def post(payload: dict) -> int:
         return 0
 
     sys.stderr.write(buf.getvalue())
-    if kind == "landscape":
+    if kind == "domain":
+        sys.stderr.write(
+            "\nドメイン知識の台帳が検証を通っていない。\n"
+            "  - confidence を必ず付ける（confirmed / likely / assumed）\n"
+            "  - confirmed を名乗るなら、他人が再確認できる根拠を書く"
+            "（実験 exp0003 / URL / 出典 s0001）\n"
+            "  - implication は25字以上。打ち手にどう効くかが書けない事実は雑学\n"
+            "  - 自分で確かめた事実が最低2件は要る（読んだだけの知識で進まない）\n"
+        )
+    elif kind == "landscape":
         sys.stderr.write(
             "\n地固めが検証を通っていない。"
             " これが通るまで modeling 系の軸には進めない。\n"

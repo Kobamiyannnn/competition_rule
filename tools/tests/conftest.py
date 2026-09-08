@@ -43,7 +43,29 @@ def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         yaml.safe_dump({"ideas": valid_ideas(3)}, allow_unicode=True), encoding="utf-8")
     (tmp_path / "knowledge" / "landscape.yaml").write_text(
         yaml.safe_dump(valid_landscape(), allow_unicode=True), encoding="utf-8")
+    (tmp_path / "knowledge" / "domain.yaml").write_text(
+        yaml.safe_dump(valid_domain(), allow_unicode=True), encoding="utf-8")
     return tmp_path
+
+
+def valid_domain(n_facts: int = 5, n_confirmed: int = 2) -> dict:
+    """検証を通るドメイン台帳。confirmed には再確認できる根拠が要る。"""
+    return {
+        "facts": [
+            {
+                "id": f"d{k:04d}",
+                "statement": "同一患者の複数枚は同じ日に撮影されており、撮影条件がほぼ同じ。",
+                "source": "data_observation" if k <= n_confirmed else "domain_literature",
+                "evidence": (f"https://example.invalid/doc/{k}"
+                             if k <= n_confirmed else "領域の教科書に記載がある。"),
+                "confidence": "confirmed" if k <= n_confirmed else "likely",
+                "implication": "患者をまたぐ分割にしないと、同条件の画像が"
+                               "train と valid に分かれてリークする。",
+                "transferred_to": [],
+            }
+            for k in range(1, n_facts + 1)
+        ]
+    }
 
 
 def valid_landscape(n_sources: int = 5, n_transferred: int = 3) -> dict:

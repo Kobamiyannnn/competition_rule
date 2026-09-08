@@ -53,6 +53,7 @@ class State:
     coverage: dict = dc_field(default_factory=dict)
     validation: dict = dc_field(default_factory=dict)
     landscape: dict = dc_field(default_factory=dict)
+    domain: dict = dc_field(default_factory=dict)
     backlog: dict = dc_field(default_factory=dict)
     experiments: list[Experiment] = dc_field(default_factory=list)
     decisions: list[dict] = dc_field(default_factory=list)
@@ -84,6 +85,10 @@ class State:
             if isinstance(a, dict) and a.get("id") == axis_id:
                 return a
         return None
+
+    @property
+    def facts(self) -> list[dict]:
+        return [f for f in (self.domain.get("facts") or []) if isinstance(f, dict)]
 
     @property
     def sources(self) -> list[dict]:
@@ -174,6 +179,7 @@ def load_state(root: Path | None = None) -> State:
     state.coverage = _load_yaml(knowledge_dir(r) / "coverage.yaml")
     state.validation = _load_yaml(knowledge_dir(r) / "validation.yaml")
     state.landscape = _load_yaml(knowledge_dir(r) / "landscape.yaml")
+    state.domain = _load_yaml(knowledge_dir(r) / "domain.yaml")
     state.backlog = _load_yaml(r / "ideas" / "backlog.yaml")
 
     if not state.coverage.get("axes"):

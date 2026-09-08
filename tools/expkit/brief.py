@@ -18,6 +18,7 @@ from .gates import (
     current_phase,
     cv_trust,
     gate_backlog,
+    inconclusive_streak,
     policy,
     recon_findings,
 )
@@ -142,9 +143,12 @@ def _section_allowed(state: State) -> list[str]:
         "",
         f"- phase: **{ph.get('id')}** — {ph.get('goal', '')}",
         f"- 指標実装の検証: {'済' if state.metric_verified else '**未**（他の軸に進めない）'}",
-        "- 地固め: " + (f"済（出典 {len(state.sources)} 件）" if not recon else
-                        f"**未**（出典 {len(state.sources)} 件）。"
-                        "modeling 系の軸に進めない。`/survey` で埋める"),
+        "- 地固め: " + (
+            f"済（出典 {len(state.sources)} 件 / 事実 {len(state.facts)} 件）"
+            if not recon else
+            f"**未**（出典 {len(state.sources)} 件 / 事実 {len(state.facts)} 件）。"
+            "modeling 系の軸に進めない。`/survey` と `/learn-domain` で埋める"
+        ),
         f"- CV の信頼性: {trust.summary()}",
     ]
 
@@ -160,6 +164,16 @@ def _section_allowed(state: State) -> list[str]:
         lines.append(f"- 直近{total}本の tier: {ratio}")
         if need:
             lines.append(f"- **次の実験は tier: {need[0]} にする**（配分が目標を割っている）")
+
+    assumed = [f for f in state.facts if f.get("confidence") == "assumed"]
+    if assumed:
+        ids = ", ".join(str(f.get("id") or "?") for f in assumed[:5])
+        lines.append(f"- 未検証の仮定: {len(assumed)} 件（{ids}）。残っている間は打ち切れない")
+    streak = inconclusive_streak(state)
+    if streak:
+        limit = int(pol["inconclusive_streak_limit"])
+        tail = "。**次の実験は error_analysis 軸**" if streak >= limit else ""
+        lines.append(f"- 判定できなかった決定が {streak} 回連続{tail}")
 
     saturated = [a for a in sorted(state.axis_ids) if state.axis_status(a) == "saturated"]
     if saturated:

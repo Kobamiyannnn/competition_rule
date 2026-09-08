@@ -1,0 +1,33 @@
+# ドメイン知識 — この問題領域について「何が本当か」。
+#
+# knowledge/landscape.yaml との違い:
+#   landscape … 何をやればいいか（手法の話）。過去の解法・論文。
+#   ここ      … 何が本当か（対象そのものの話）。データの成り立ち、現象の性質。
+#
+# ドメイン知識は調べ終わらない。データを見るたび、モデルが外すたびに増える。
+# 一度埋めて終わりにしない。誤り分析（error_analysis 軸）の出力はここに入る。
+#
+# confidence を必ず付ける。**検証していない仮定が前提として使われる**のが
+# 「弱い根拠で打ち切る」の正体なので、そこを型で分ける。
+#   confirmed … 自分で確かめた。evidence に確認手順か実験 ID がある
+#   likely    … 出典があるが、このデータでは確かめていない
+#   assumed   … 仮定。まだ何の裏付けもない
+#
+# assumed が残っている間は打ち切れない。未検証の前提を抱えたまま
+# 「打ち手がない」と言えないようにするため。
+
+facts: []
+# - id: d0001
+#   statement: |
+#     同一患者の複数枚は同じ日に撮影されており、撮影条件がほぼ同じ。
+#   source: data_observation   # dataset_doc / domain_literature / expert /
+#                              # data_observation / error_analysis / discussion
+#   evidence: |
+#     どこから分かったか。URL、実験 ID（exp0003）、または実データでの確認手順。
+#     confirmed を名乗るなら、他人が同じ手順で再確認できるように書く。
+#   confidence: confirmed
+#   implication: |
+#     この事実が打ち手にどう効くか。ここが書けない事実は雑学であって、
+#     台帳に置く意味がない。
+#   transferred_to: []   # ideas/backlog.yaml に移した項目の ID
+#   resolved_by: null    # assumed → confirmed に変えた実験 ID

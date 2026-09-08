@@ -51,14 +51,26 @@
 
 だから最初の phase は `p0_recon`（地固め）にしてある。
 
+地固めは2本立てで、答える問いが違う。
+
+| | `knowledge/landscape.yaml` | `knowledge/domain.yaml` |
+|---|---|---|
+| 問い | **何をやればいいか**（手法） | **何が本当か**（対象そのもの） |
+| 中身 | 問題の定式化、過去の上位解法、論文 | データの成り立ち、現象の性質、ありえない値 |
+| 埋める | `/survey` | `/learn-domain` |
+| 終わるか | 序盤で一区切り | **終わらない。誤り分析で増え続ける** |
+
 | 仕組み | 中身 |
 |---|---|
-| `knowledge/landscape.yaml` | このコンペ固有の外部知識。問題の定式化と、調べた出典 |
-| `/survey` スキル | 問題を既知の定式化に落とし、過去の上位解法・論文・討論を調べて記録する |
-| **recon ゲート** | 地固めが検証を通るまで `metric_fidelity` / `validation` / `data_leak` 以外の軸に進めない |
+| **recon ゲート** | 両方が検証を通るまで `metric_fidelity` / `validation` / `data_leak` 以外の軸に進めない |
 | 出典の種類の下限 | 論文だけ・解法だけにさせない（既定2種類） |
 | 在庫への転記の下限 | 調べただけで打ち手にしていない状態を通さない（既定3件） |
+| `confidence` の型 | `confirmed` / `likely` / `assumed`。**自分で確かめた事実が2件は要る** |
+| **未検証の仮定** | `assumed` が残っている間は打ち切れない |
 | `expctl landscape check` | 出典の URL が実在するか確かめる。捏造された出典を残さない |
+
+`confidence` を型で分けるのが肝。**検証していない仮定が前提として使われるのが
+「弱い根拠で打ち切る」の正体**なので、そこを見えるようにする。
 
 `stop` の決定も地固めが済むまで通らない。
 **調べていないなら、打ち手が無いのではなく知らないだけ。**
@@ -83,6 +95,7 @@ p3_ideas     飽和した軸の外側へ
 | アイデア在庫 | 未実行が下限（既定8件）を割ると次の実験に進めない。**数えるのは検証を通った項目だけ** |
 | tier クォータ | `exploit`/`explore`/`moonshot` の比率を phase ごとに強制 |
 | **飽和判定** | 試し尽くした軸への `exploit` を**禁止**する。チューニングの無限沼を塞ぐ |
+| **誤り分析の強制** | 決定が3回連続で `inconclusive` になったら、次の実験は `error_analysis` 軸 |
 | 較正の追跡 | 期待と実際を突き合わせる。**的中率が高すぎると警告が出る**（＝賭けていない） |
 
 飽和判定が核。「まずハイパラなど可動域を試し尽くしてから、アイデアを試せる
@@ -193,6 +206,7 @@ tools/expctl decide close dec0002 --experiment exp0004   # 機械で答え合わ
 |---|---|
 | `/init-competition` | コンペ用に一度で立ち上げる |
 | `/survey` | 地固め。問題を定式化し、上位解法・論文・討論を調べて記録する |
+| `/learn-domain` | ドメイン知識を貯める。データ観察と誤り分析から `domain.yaml` を埋める |
 | `/log-experiment` | 実験記録の書き方。良い例と悪い例つき |
 | `/decide-next` | 次の一手の決め方。「打ち手がない」と感じたときの確認手順 |
 | `/write-report` | レポートの作り方。結論600字の書き方 |
@@ -210,7 +224,8 @@ experiments/exp0001/
 decisions/dec0001.yaml     意思決定の台帳。期待と実際を突き合わせる
 ideas/backlog.yaml         アイデア在庫。空にできない
 knowledge/
-  landscape.yaml           地固め。このコンペ固有の外部知識（/survey が埋める）
+  landscape.yaml           地固め。何をやればいいか（/survey が埋める）
+  domain.yaml              地固め。何が本当か（/learn-domain が埋める）
   coverage.yaml            探索の網羅マップと飽和判定
   validation.yaml          CV 戦略と、分かっていないことの台帳
   operations.md            回し方・環境の癖・踏んだ失敗。引き継ぎに載る
@@ -227,7 +242,7 @@ tools/
   expkit/                  lint・ゲート・状態集計・レポート生成
   hooks/guard.py           記録の lint 強制と metrics.json の保護
   hooks/session.py         引き継ぎの注入と compact 前の点検
-  tests/                   137件
+  tests/                   167件
 templates/
   experiment_runner.py     実験スクリプトの雛形
   CLAUDE.md                作業規範の雛形
@@ -244,6 +259,7 @@ templates/
 | `expctl decide new/close` | 決定の作成と機械的な答え合わせ |
 | `expctl saturate <axis>` | 軸を飽和（または打ち切り）として宣言 |
 | `expctl landscape check` | 出典の URL が実在するか確かめる |
+| `expctl lint domain` | ドメイン知識の台帳を検査する |
 | `expctl idea list` | 在庫を gain/cost 順に並べる |
 | `expctl idea add` | 在庫に足す。検証を通らないと入らない |
 | `expctl idea retire` | 在庫から捨てる。20字以上の理由が要る |

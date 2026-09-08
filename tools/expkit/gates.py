@@ -16,6 +16,9 @@ from .state import Experiment, State, spearman
 
 DEFAULT_POLICY = {
     "landscape_min_sources": 5,
+    "domain_min_facts": 5,          # ドメインの事実の下限
+    "domain_min_confirmed": 2,      # うち自分で確かめたものの下限
+    "inconclusive_streak_limit": 3, # 連続でこれだけ判定できなかったら誤り分析へ
     "landscape_min_kinds": 2,
     "landscape_min_transferred": 3,
     "backlog_min_open": 8,
@@ -33,7 +36,8 @@ DEFAULT_PHASES = [
     {
         "id": "p0_recon",
         "goal": "地固め。評価指標の実装一致、テストの作られ方の把握、"
-                "この問題に対して世の中が何をやってきたかの調査。手を動かす前に調べる。",
+                "手法の調査（landscape）と、対象そのものの理解（domain）。"
+                "手を動かす前に調べる。",
         "tier_quota": {"exploit": 0.0, "explore": 1.0, "moonshot": 0.0},
     },
     {
@@ -129,25 +133,46 @@ def recon_done(state: State) -> bool:
 
 
 def recon_findings(state: State) -> list[GateFinding]:
-    """地固めの不足を返す。空なら済んでいる。"""
+    """地固めの不足を返す。空なら済んでいる。
+
+    地固めは2本立て。何をやればいいか（landscape）と、何が本当か（domain）。
+    どちらが欠けても、汎用の打ち手を汎用の順序で試すだけの進行になる。
+    """
     from .config import load_lint_config
-    from .lint import lint_landscape
+    from .lint import lint_domain, lint_landscape
+
+    cfg = load_lint_config(state.root)
+    pol = policy(state)
+    out: list[GateFinding] = []
 
     per_source, whole = lint_landscape(
-        state.landscape, cfg=load_lint_config(state.root),
-        policy=policy(state), known_ideas=state.idea_ids,
+        state.landscape, cfg=cfg, policy=pol, known_ideas=state.idea_ids,
     )
     errors = list(whole.errors) + [f for r in per_source for f in r.errors]
-    if not errors:
-        return []
+    if errors:
+        rules = sorted({f.rule for f in errors})
+        head = whole.errors[0].message if whole.errors else errors[0].message
+        out.append(GateFinding(
+            gate="recon.landscape_incomplete", severity="error",
+            message=f"地固め（手法の調査）が済んでいない（{len(errors)} 件）。"
+                    f"{' '.join(head.split())}"
+                    f" 詳細は `tools/expctl lint landscape`。規則: {', '.join(rules[:4])}",
+        ))
 
-    rules = sorted({f.rule for f in errors})
-    head = whole.errors[0].message if whole.errors else errors[0].message
-    return [GateFinding(
-        gate="recon.incomplete", severity="error",
-        message=f"地固めが済んでいない（{len(errors)} 件の不足）。{' '.join(head.split())}"
-                f" 詳細は `tools/expctl lint landscape`。落ちている規則: {', '.join(rules[:5])}",
-    )]
+    per_fact, dwhole = lint_domain(
+        state.domain, cfg=cfg, policy=pol,
+        known_experiments=state.experiment_ids, known_ideas=state.idea_ids,
+    )
+    derrors = list(dwhole.errors) + [f for r in per_fact for f in r.errors]
+    if derrors:
+        rules = sorted({f.rule for f in derrors})
+        head = dwhole.errors[0].message if dwhole.errors else derrors[0].message
+        out.append(GateFinding(
+            gate="recon.domain_incomplete", severity="error",
+            message=f"ドメイン知識が足りない（{len(derrors)} 件）。{' '.join(head.split())}"
+                    f" 詳細は `tools/expctl lint domain`。規則: {', '.join(rules[:4])}",
+        ))
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -194,7 +219,8 @@ def gate_new_experiment(state: State, *, tier: str, axes: list[str]) -> list[Gat
                 gate="recon.axis_blocked", severity="error",
                 message="地固めが済むまで触れるのは "
                         f"{', '.join(sorted(RECON_ALLOWED_AXES))} だけ。"
-                        " `/survey` で knowledge/landscape.yaml を埋める。",
+                        " 手法の調査は `/survey`（knowledge/landscape.yaml）、"
+                        " ドメイン知識は `/learn-domain`（knowledge/domain.yaml）。",
             ))
 
     # tier クォータ。phase ごとに配分が違う。
@@ -220,9 +246,33 @@ def gate_new_experiment(state: State, *, tier: str, axes: list[str]) -> list[Gat
                             f" 次の実験は tier: {worst} にする。",
                 ))
 
+    # 判定できない実験が続いたら、次は誤り分析。
+    # 数値が動かないのに闇雲に次を撃つのは、探索ではなく手詰まりの症状。
+    streak = inconclusive_streak(state)
+    limit = int(pol["inconclusive_streak_limit"])
+    if streak >= limit and "error_analysis" not in axes:
+        out.append(GateFinding(
+            gate="stuck.inconclusive_streak", severity="error",
+            message=f"決定が {streak} 回連続で inconclusive。"
+                    " 差がノイズ幅に埋もれ続けている状態で次を撃っても、また判定できない。"
+                    " 次の実験は error_analysis 軸にして、どのケースをなぜ外したかを見る。"
+                    " 分かったことは knowledge/domain.yaml に入れる（`/learn-domain`）。",
+        ))
+
     # 在庫。空にさせない。
     out.extend(gate_backlog(state))
     return out
+
+
+def inconclusive_streak(state: State) -> int:
+    """決着した決定を新しい順に見て、inconclusive が続いている数。"""
+    n = 0
+    for d in reversed(state.closed_decisions()):
+        if d["outcome"]["result"] == "inconclusive":
+            n += 1
+        else:
+            break
+    return n
 
 
 def valid_open_ideas(state: State) -> tuple[list[dict], list[dict]]:
@@ -329,6 +379,18 @@ def gate_stop_decision(state: State) -> list[GateFinding]:
             gate="stop.unsaturated_axes", severity="error",
             message=f"飽和していない軸が残っている: {', '.join(unsat)}。"
                     " 飽和判定を coverage.yaml に書くか、実験を続ける。",
+        ))
+
+    from .lint import assumed_facts
+
+    assumed = assumed_facts(state.domain)
+    if assumed:
+        ids = ", ".join(str(f.get("id") or "?") for f in assumed[:6])
+        out.append(GateFinding(
+            gate="stop.assumed_facts_remain", severity="error",
+            message=f"未検証の仮定が {len(assumed)} 件残っている（{ids}）。"
+                    " 検証していない前提を抱えたまま「打ち手がない」とは書けない。"
+                    " 確かめて confirmed にするか、誤りと分かったら消す。",
         ))
 
     good, _bad = valid_open_ideas(state)

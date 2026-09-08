@@ -41,8 +41,24 @@ integrity ハッシュがずれて lint が落ちる。
 通るまで、`metric_fidelity` / `validation` / `data_leak` 以外の軸には
 ゲートで進めない。埋めるのは `/survey`。
 
+地固めは2本立て。`landscape` が「何をやればいいか」、`domain` が「何が本当か」。
+
 `knowledge/priors/` は汎用の打ち手で、どのコンペでも同じ内容になる。
-**汎用の在庫からは汎用のアイデアしか出ない。** 上位との差は landscape で作る。
+**汎用の在庫からは汎用のアイデアしか出ない。** 上位との差はこの2つで作る。
+
+### 確かめていないことを confirmed と書かない
+
+`knowledge/domain.yaml` の `confidence` は型で分ける。
+自分で確かめたものだけ `confirmed`、読んだだけは `likely`、思っただけは `assumed`。
+
+**未検証の仮定が前提として使われるのが「弱い根拠で打ち切る」の正体。**
+`assumed` と書いておけば、残っている限り打ち切りゲートが止めてくれる。
+
+### 判定できない状態が続いたら誤り分析
+
+決定が3回連続で `inconclusive` になると、ゲートが次の実験に
+`error_analysis` 軸を要求する。数値が動かないのに闇雲に次を撃つのは、
+探索ではなく手詰まりの症状。OOF 予測を切り口を変えて集計する（`/learn-domain`）。
 
 ### 「打ち手がない」と書く前に
 
@@ -51,9 +67,10 @@ integrity ハッシュがずれて lint が落ちる。
 1. `expctl status` の未着手の軸
 2. `expctl idea list` の在庫
 3. `knowledge/landscape.yaml` の未消化の `takeaway`
-4. `knowledge/priors/` の未消化項目
-5. 未決着の仮説の反証条件（そのまま実験になる）
-6. `/survey` をもう一度回す
+4. `knowledge/domain.yaml` の未消化の `implication`
+5. `knowledge/priors/` の未消化項目
+6. 未決着の仮説の反証条件（そのまま実験になる）
+7. `/survey` か `/learn-domain` をもう一度回す
 
 在庫を補充するときは `expctl idea add`。入れる前に検証がかかるので、
 中身の薄い項目で数だけ満たすことはできない（出典と粒度と軸の広がりを見る）。
@@ -128,7 +145,8 @@ compact を止めはしないが、指摘が出たら先に書き出す。
 
 | 場面 | スキル |
 |---|---|
-| コンペを調べる（地固め） | `/survey` |
+| コンペを調べる（手法） | `/survey` |
+| ドメイン知識を貯める | `/learn-domain` |
 | 実験を回し終えて記録を書く | `/log-experiment` |
 | 次に何を試すか決める | `/decide-next` |
 | レポートを作る | `/write-report` |

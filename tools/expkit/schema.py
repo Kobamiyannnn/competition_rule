@@ -27,6 +27,7 @@ DEFAULT_AXES = (
     "external_data",
     "pseudo_labeling",
     "data_leak",         # リーク・重複・分布ずれの調査
+    "error_analysis",    # どのケースをなぜ外したか。ドメイン知識の主な供給源
 )
 
 RECORD_FIELDS = {
@@ -58,6 +59,24 @@ SOURCE_KINDS = (
     "benchmark",    # ベンチマークのリーダーボードや比較研究
     "blog",         # 実装記事
 )
+
+# ドメインの事実がどこから来たか。自分で確かめたのか、読んだだけかを分ける。
+FACT_SOURCES = (
+    "dataset_doc",        # データセットの公式説明
+    "domain_literature",  # 領域の文献
+    "expert",             # 専門家の記述・ヒアリング
+    "data_observation",   # 実データを見て分かった
+    "error_analysis",     # モデルの誤りを見て分かった
+    "discussion",         # コンペのディスカッション
+)
+
+# 検証していない仮定が前提として使われるのを止めるための型。
+FACT_CONFIDENCE = ("confirmed", "likely", "assumed")
+
+DOMAIN_FIELDS = {
+    "required": ("id", "statement", "source", "evidence", "confidence", "implication"),
+    "optional": ("transferred_to", "resolved_by", "note"),
+}
 
 LANDSCAPE_FIELDS = {
     "task": ("statement", "formulation", "why_hard"),

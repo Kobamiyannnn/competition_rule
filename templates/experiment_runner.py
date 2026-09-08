@@ -16,6 +16,8 @@ import sys
 import time
 from pathlib import Path
 
+import numpy as np
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 
 from expkit import metrics as expmetrics  # noqa: E402
@@ -36,9 +38,26 @@ def build_config(args: argparse.Namespace) -> dict:
     }
 
 
-def run_fold(fold: int, config: dict) -> float:
-    """1 fold を学習して、その fold のスコアを返す。"""
+def run_fold(fold: int, config: dict) -> tuple[float, np.ndarray, np.ndarray]:
+    """1 fold を学習し、(スコア, 検証行のインデックス, その予測) を返す。
+
+    予測を返すのは、out-of-fold 予測を保存して誤り分析に使うため。
+    保存していないと、決定が判定できなくなったときに
+    「どのケースをなぜ外したか」を見る手段が無くなる。
+    """
     raise NotImplementedError("TODO: 学習と評価を書く")
+
+
+def save_oof(exp_id: str, oof: np.ndarray) -> Path:
+    """out-of-fold 予測を保存する。誤り分析（/learn-domain）の入力になる。
+
+    artifacts/ は .gitignore で除外されるので、リポジトリは太らない。
+    """
+    path = Path(__file__).resolve().parents[1] / "experiments" / exp_id / "artifacts"
+    path.mkdir(parents=True, exist_ok=True)
+    out = path / "oof.npy"
+    np.save(out, oof)
+    return out
 
 
 def main() -> int:
@@ -46,12 +65,22 @@ def main() -> int:
     p.add_argument("--exp", required=True, help="実験 ID（例: exp0001）")
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--folds", type=int, default=5)
+    p.add_argument("--n-rows", type=int, default=0,
+                   help="学習データの行数。OOF を保存するのに要る")
     args = p.parse_args()
 
     config = build_config(args)
     started = time.monotonic()
 
-    scores = [run_fold(f, config) for f in range(args.folds)]
+    scores: list[float] = []
+    oof = np.full(args.n_rows, np.nan) if args.n_rows else None
+    for f in range(args.folds):
+        score, valid_idx, preds = run_fold(f, config)
+        scores.append(score)
+        if oof is not None:
+            oof[valid_idx] = preds
+    if oof is not None:
+        print(f"{save_oof(args.exp, oof)} に OOF を保存した。")
 
     mean = sum(scores) / len(scores)
     var = sum((s - mean) ** 2 for s in scores) / (len(scores) - 1) if len(scores) > 1 else 0.0

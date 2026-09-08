@@ -26,10 +26,10 @@ current_phase: p0_recon
 
 phases:
   - id: p0_recon
-    goal: 地固め。評価指標の実装一致、テストの作られ方の把握、そして
-          この問題に対して世の中が何をやってきたかの調査。手を動かす前に調べる。
+    goal: 地固め。評価指標の実装一致、テストの作られ方の把握、
+          手法の調査（landscape）と、対象そのものの理解（domain）。手を動かす前に調べる。
     tier_quota: {exploit: 0.0, explore: 1.0, moonshot: 0.0}
-    exit: metric.verified が true、knowledge/landscape.yaml が検証を通る
+    exit: metric.verified が true、landscape.yaml と domain.yaml が検証を通る
   - id: p1_survey
     goal: モデル族を意図的に雑に走査して、深く掘る先を選ぶ。
           landscape で有力と分かったものから当てる。
@@ -50,6 +50,9 @@ policy:
   landscape_min_sources: 5      # 調べた出典の下限
   landscape_min_kinds: 2        # 出典の種類の下限（論文だけ・解法だけにしない）
   landscape_min_transferred: 3  # 在庫に移した出典の下限
+  domain_min_facts: 5           # ドメインの事実の下限
+  domain_min_confirmed: 2       # うち自分で確かめたものの下限
+  inconclusive_streak_limit: 3  # 連続でこれだけ判定できなかったら誤り分析へ
 
   backlog_min_open: 8         # 未実行アイデアの下限。割ると次の実験に進めない
   tier_window: 10             # tier 比率を見る窓

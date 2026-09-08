@@ -16,6 +16,7 @@ from expkit.lint import Report, lint_prose_field
 LOG_EXPERIMENT = ".claude/skills/log-experiment/SKILL.md"
 WRITE_REPORT = ".claude/skills/write-report/SKILL.md"
 SURVEY = ".claude/skills/survey/SKILL.md"
+LEARN_DOMAIN = ".claude/skills/learn-domain/SKILL.md"
 
 # (欄, 本文, 落ちるべきか, 出典)
 CASES = [
@@ -69,6 +70,22 @@ CASES = [
         False, f"{SURVEY} 在庫への転記 良い例",
     ),
     (
+        "domain.fact.statement",
+        "モデルは高齢の患者が苦手。",
+        True, f"{LEARN_DOMAIN} 事実 悪い例",
+    ),
+    (
+        "domain.fact.statement",
+        "誤差の上位10%のうち72%が、撮影装置Bの画像に集中している。",
+        False, f"{LEARN_DOMAIN} 事実 良い例",
+    ),
+    (
+        "domain.fact.implication",
+        "装置を特徴量に入れるか、装置ごとに正規化する。"
+        "test の装置比率が train と違うなら分布ずれの原因でもある。",
+        False, f"{LEARN_DOMAIN} implication 良い例",
+    ),
+    (
         "report.conclusion",
         "今回のコンペでは、特徴量エンジニアリングが全体として重要であることが"
         "示唆された。特にユーザ単位の集約が有効に機能し、大幅なスコア向上に"
@@ -103,5 +120,6 @@ def test_examples_are_still_in_the_skill_files() -> None:
     root = Path(__file__).resolve().parents[2]
     for path, marker in [(LOG_EXPERIMENT, "特徴量を見直して"),
                          (WRITE_REPORT, "cv.mean を最も動かしたのは"),
-                         (SURVEY, "StratifiedGroupKFold")]:
+                         (SURVEY, "StratifiedGroupKFold"),
+                         (LEARN_DOMAIN, "撮影装置Bの画像に集中")]:
         assert marker in (root / path).read_text(encoding="utf-8"), path

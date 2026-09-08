@@ -18,6 +18,8 @@ from typing import Any, Iterable
 from . import metrics as metrics_mod
 from .schema import (
     DECISION_RESULTS,
+    FACT_CONFIDENCE,
+    FACT_SOURCES,
     DECISION_TYPES,
     DIRECTIONS,
     HYPOTHESIS_STATUS,
@@ -136,6 +138,10 @@ def _texts(doc: dict, kind: str) -> list[tuple[str, str, str]]:
         task = doc.get("task") or {}
         for f in ("statement", "formulation", "why_hard"):
             push(f"landscape.task.{f}", f"task.{f}", task.get(f))
+    elif kind == "domain_fact":
+        push("domain.fact.statement", "statement", doc.get("statement"))
+        push("domain.fact.evidence", "evidence", doc.get("evidence"))
+        push("domain.fact.implication", "implication", doc.get("implication"))
     elif kind == "landscape_source":
         push("landscape.source.relevance", "relevance", doc.get("relevance"))
         push("landscape.source.takeaway", "takeaway", doc.get("takeaway"))
@@ -407,6 +413,134 @@ def _lint_waivers(doc: dict, report: Report) -> None:
         if len(reason) < 20:
             report.add(rule="waiver.thin_reason", severity="error", field=f"{where}.reason",
                        message="抜ける理由が20字未満。抜け道の乱用を防ぐため理由を書く。")
+
+
+# ---------------------------------------------------------------------------
+# domain — ドメイン知識の台帳
+#
+# landscape が「何をやればいいか」なら、こちらは「何が本当か」。
+# 調べ終わらない種類の知識なので、誤り分析の出力もここに入る。
+#
+# confidence を型で分けるのが肝。検証していない仮定が前提として使われるのが
+# 「弱い根拠で打ち切る」の正体で、それを見えるようにする。
+# ---------------------------------------------------------------------------
+
+def lint_domain(
+    domain: dict,
+    *,
+    cfg: dict,
+    policy: dict,
+    known_experiments: set[str] | None = None,
+    known_ideas: set[str] | None = None,
+) -> tuple[list[Report], Report]:
+    structure = cfg.get("structure", {})
+    min_impl = int(structure.get("domain_implication_min_chars", 25))
+    confirmed_patterns = structure.get("domain_confirmed_evidence_patterns") or []
+
+    facts = list(domain.get("facts") or [])
+    per_fact: list[Report] = []
+    whole = Report(target="knowledge/domain.yaml")
+    seen: set[str] = set()
+    confirmed = 0
+
+    for n, fact in enumerate(facts):
+        ident = fact.get("id") if isinstance(fact, dict) else None
+        report = Report(target=f"knowledge/domain.yaml [{ident or f'#{n}'}]")
+        per_fact.append(report)
+
+        if not isinstance(fact, dict):
+            report.add(rule="schema.type", severity="error", field=f"facts[{n}]",
+                       message="事実の要素はマッピング。")
+            continue
+
+        for key in ("id", "statement", "source", "evidence", "confidence", "implication"):
+            if not str(fact.get(key) or "").strip():
+                report.add(rule="schema.missing", severity="error", field=key,
+                           message="必須の欄が空。")
+
+        ident_s = str(fact.get("id") or "")
+        if ident_s and ident_s in seen:
+            whole.add(rule="domain.duplicate_id", severity="error", field="facts",
+                      message=f"ID が重複している: {ident_s}")
+        seen.add(ident_s)
+
+        source = fact.get("source")
+        if source is not None and source not in FACT_SOURCES:
+            report.add(rule="schema.enum", severity="error", field="source",
+                       message=f"source は {'/'.join(FACT_SOURCES)} のいずれか。")
+
+        conf = fact.get("confidence")
+        if conf is not None and conf not in FACT_CONFIDENCE:
+            report.add(rule="schema.enum", severity="error", field="confidence",
+                       message=f"confidence は {'/'.join(FACT_CONFIDENCE)} のいずれか。")
+
+        evidence = str(fact.get("evidence") or "").strip()
+        if conf == "confirmed":
+            confirmed += 1
+            if evidence and not _match_any(evidence, confirmed_patterns):
+                report.add(
+                    rule="domain.unconfirmable_evidence", severity="error", field="evidence",
+                    message="confirmed を名乗るなら、他人が再確認できる根拠を書く"
+                            "（確認に使った実験 exp0003 / URL / 地固めの出典 s0001）。"
+                            " 自分で確かめていないなら likely か assumed にする。",
+                )
+        if known_experiments is not None:
+            for ref in re.findall(r"\bexp\d{4}\b", evidence):
+                if ref not in known_experiments:
+                    report.add(rule="link.experiment_missing", severity="error",
+                               field="evidence",
+                               message=f"存在しない実験を根拠にしている: {ref}")
+
+        impl = str(fact.get("implication") or "").strip()
+        if impl and _visible_len(impl) < min_impl:
+            report.add(
+                rule="domain.implication_too_thin", severity="error", field="implication",
+                message=f"{_visible_len(impl)}字。{min_impl}字未満。"
+                        " 打ち手にどう効くかが書けない事実は雑学であって、台帳に置く意味がない。",
+            )
+
+        resolved = fact.get("resolved_by")
+        if conf == "confirmed" and source == "data_observation" and not evidence:
+            report.add(rule="schema.missing", severity="error", field="evidence",
+                       message="実データで確かめたなら、その手順を書く。")
+        if resolved and known_experiments is not None and resolved not in known_experiments:
+            report.add(rule="link.experiment_missing", severity="error", field="resolved_by",
+                       message=f"存在しない実験を指している: {resolved!r}")
+
+        if known_ideas is not None:
+            for i in fact.get("transferred_to") or []:
+                if i not in known_ideas:
+                    report.add(rule="link.idea_missing", severity="error",
+                               field="transferred_to",
+                               message=f"在庫に無いアイデアを指している: {i!r}")
+
+        _lint_prose(fact, "domain_fact", cfg, report)
+
+    min_facts = int(policy.get("domain_min_facts", 5))
+    min_confirmed = int(policy.get("domain_min_confirmed", 2))
+
+    if len(facts) < min_facts:
+        whole.add(
+            rule="domain.too_few_facts", severity="error", field="facts",
+            message=f"ドメインの事実が {len(facts)} 件。下限 {min_facts} 件。"
+                    " 対象そのものについて分かっていることを書く。"
+                    " データの成り立ち、現象の性質、ありえない値。",
+        )
+    if len(facts) >= min_facts and confirmed < min_confirmed:
+        whole.add(
+            rule="domain.nothing_confirmed", severity="error", field="facts",
+            message=f"自分で確かめた事実が {confirmed} 件（下限 {min_confirmed}）。"
+                    " 読んだだけの知識しかない状態で進むと、"
+                    " 検証していない前提の上に実験を積むことになる。"
+                    " 実データを見て確かめられることを確かめる。",
+        )
+    return per_fact, whole
+
+
+def assumed_facts(domain: dict) -> list[dict]:
+    """未検証の仮定。残っている間は打ち切れない。"""
+    return [f for f in (domain.get("facts") or [])
+            if isinstance(f, dict) and f.get("confidence") == "assumed"]
 
 
 # ---------------------------------------------------------------------------

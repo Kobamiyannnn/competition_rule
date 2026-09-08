@@ -37,3 +37,8 @@ axes:
   - id: data_leak
     note: リーク、重複、train/test の分布ずれ、時系列の未来参照。
     status: untouched
+  - id: error_analysis
+    note: どのケースをなぜ外したか。ドメイン知識の主な供給源で、
+          特徴量の着想はここから出る。決定が連続で inconclusive になったら
+          次はこの軸を強制される。
+    status: untouched

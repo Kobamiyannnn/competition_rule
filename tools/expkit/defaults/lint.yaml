@@ -23,6 +23,9 @@ limits:
   landscape.task.why_hard: 200
   landscape.source.relevance: 200
   landscape.source.takeaway: 250
+  domain.fact.statement: 150
+  domain.fact.implication: 200
+  domain.fact.evidence: 250
   report.conclusion: 600
 
 # ---------------------------------------------------------------------------
@@ -63,6 +66,10 @@ field_profiles:
   landscape.task.why_hard: interpretive
   landscape.source.relevance: strict
   landscape.source.takeaway: strict
+  # ドメインの事実は事実として書く。「重要そう」ではなく何が本当かを書く。
+  domain.fact.statement: strict
+  domain.fact.implication: interpretive
+  domain.fact.evidence: strict
   report.conclusion: strict
 
 # ---------------------------------------------------------------------------
@@ -278,6 +285,9 @@ structure:
     - landscape.task.why_hard
     - landscape.source.relevance
     - landscape.source.takeaway
+    - domain.fact.statement
+    - domain.fact.implication
+    - domain.fact.evidence
 
   # falsification が条件文の形になっているかの検査。
   # 条件節マーカーと観測可能マーカーの両方を含まないと error。
@@ -302,12 +312,22 @@ structure:
   # 地固めの検証。
   # takeaway が短いと「良い結果を報告している」で終わり、打ち手に移せない。
   landscape_takeaway_min_chars: 30
+
+  # ドメイン知識の検証。
+  # implication が書けない事実は雑学で、台帳に置く意味がない。
+  domain_implication_min_chars: 25
+  # confirmed を名乗るには、他人が再確認できる形の evidence が要る。
+  domain_confirmed_evidence_patterns:
+    - '\bexp\d{4}\b'            # 確認に使った実験
+    - 'https?://'                 # 公式資料
+    - '\bs\d{4}\b'              # 地固めの出典
   landscape_url_pattern: '^https?://[^\s]+$'
   idea_evidence_patterns:
     - 'priors/[\w./-]+#\w+'      # 事前知識ライブラリの項目
     - '\bexp\d{4}\b'            # このコンペで観測された実験
     - '\bdec\d{4}\b'            # 過去の決定
     - '\bs\d{4}\b'              # 地固めで調べた出典（knowledge/landscape.yaml）
+    - '\bd\d{4}\b'              # ドメインの事実（knowledge/domain.yaml）
     - 'https?://'                 # 外部の出典
 
   falsification_observable_markers:

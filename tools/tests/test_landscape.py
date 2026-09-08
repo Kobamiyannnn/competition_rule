@@ -108,7 +108,7 @@ class TestReconGate:
         _set(repo, valid_landscape(n_sources=1))
         gates = _gates(gate_new_experiment(load_state(repo), tier="explore",
                                            axes=["features"]))
-        assert "recon.incomplete" in gates
+        assert "recon.landscape_incomplete" in gates
         assert "recon.axis_blocked" in gates
 
     @pytest.mark.parametrize("axis", sorted(RECON_ALLOWED_AXES))

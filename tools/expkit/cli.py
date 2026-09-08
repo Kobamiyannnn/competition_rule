@@ -17,6 +17,7 @@ from . import metrics as metrics_mod
 from .config import load_lint_config
 from .gates import (
     calibration,
+    inconclusive_streak,
     policy,
     recon_findings,
     conservatism_findings,
@@ -27,7 +28,14 @@ from .gates import (
     gate_stop_decision,
     judge,
 )
-from .lint import lint_backlog, lint_decision, lint_idea, lint_landscape, lint_record
+from .lint import (
+    lint_backlog,
+    lint_decision,
+    lint_domain,
+    lint_idea,
+    lint_landscape,
+    lint_record,
+)
 from .paths import (
     decision_path,
     decisions_dir,
@@ -175,6 +183,14 @@ def cmd_lint(args: argparse.Namespace) -> int:
         reports.extend(per_idea)
         reports.append(whole)
 
+    def lint_the_domain() -> None:
+        per_fact, whole = lint_domain(
+            state.domain, cfg=cfg, policy=policy(state),
+            known_experiments=exp_ids, known_ideas=state.idea_ids,
+        )
+        reports.extend(per_fact)
+        reports.append(whole)
+
     def lint_the_landscape() -> None:
         per_source, whole = lint_landscape(
             state.landscape, cfg=cfg, policy=policy(state), known_ideas=state.idea_ids,
@@ -203,6 +219,9 @@ def cmd_lint(args: argparse.Namespace) -> int:
                 if resolved.name == "landscape.yaml":
                     lint_the_landscape()
                     continue
+                if resolved.name == "domain.yaml":
+                    lint_the_domain()
+                    continue
                 print(f"{t}: 記録でも決定でもないので検査しない。")
                 continue
             e = next((x for x in state.experiments if x.id == t), None)
@@ -214,6 +233,11 @@ def cmd_lint(args: argparse.Namespace) -> int:
                 continue
             if t in ("landscape", "recon"):
                 lint_the_landscape()
+                if t == "recon":
+                    lint_the_domain()
+                continue
+            if t == "domain":
+                lint_the_domain()
                 continue
             dp = decision_path(t, root)
             if dp.exists():
@@ -229,6 +253,7 @@ def cmd_lint(args: argparse.Namespace) -> int:
                 lint_one_decision(_load_yaml(f), f.stem)
         lint_the_backlog()
         lint_the_landscape()
+        lint_the_domain()
 
     if not reports:
         print("検査対象が無い。")
@@ -266,9 +291,20 @@ def cmd_status(args: argparse.Namespace) -> int:
           + ("" if state.metric_verified else f"  {DIM}← ここが false の間は打ち切れない{RESET}"))
     recon = recon_findings(state)
     n_src = len(state.sources)
+    n_fact = len(state.facts)
+    n_assumed = len([f for f in state.facts if f.get("confidence") == "assumed"])
     print(f"{BOLD}地固め{RESET}       "
-          + (f"済（出典 {n_src} 件）" if not recon
-             else f"{DIM}未 — 出典 {n_src} 件。modeling 系の軸に進めない{RESET}"))
+          + (f"済（出典 {n_src} 件 / 事実 {n_fact} 件）" if not recon
+             else f"{DIM}未 — 出典 {n_src} 件 / 事実 {n_fact} 件。"
+                  f"modeling 系の軸に進めない{RESET}"))
+    if n_assumed:
+        print(f"{BOLD}未検証の仮定{RESET} {n_assumed} 件  "
+              f"{DIM}← 残っている間は打ち切れない{RESET}")
+    streak = inconclusive_streak(state)
+    if streak:
+        limit = int(policy(state)["inconclusive_streak_limit"])
+        mark = "  ← 次は error_analysis 軸" if streak >= limit else ""
+        print(f"{BOLD}判定できず{RESET}   {streak} 回連続{DIM}{mark}{RESET}")
     print(f"{BOLD}CV信頼性{RESET}     {trust.summary()}")
     print(f"{BOLD}実験{RESET}         {len(state.experiments)} 本   "
           f"{BOLD}決定{RESET} {len(state.decisions)} 件（決着 {cal.n} 件）")
