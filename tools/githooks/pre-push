@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# テンプレートへの誤プッシュを止める。
+#
+# このテンプレートを clone してコンペを始めると、origin はテンプレートを
+# 指したままになる。気づかずにプッシュすると、コンペの作業が
+# 公開テンプレート側に飛ぶ。データの規約違反にもなりうる。
+#
+# tools/bootstrap.sh が git config core.hooksPath tools/githooks を設定して有効にする。
+
+set -u
+
+remote_name="${1:-}"
+remote_url="${2:-}"
+
+root="$(git rev-parse --show-toplevel 2>/dev/null || echo .)"
+template_source="$root/.template-source"
+[ -f "$template_source" ] || exit 0
+
+normalize() {
+  # https://github.com/owner/repo.git も git@github.com:owner/repo も owner/repo にする
+  printf '%s' "$1" \
+    | sed -E 's#^(https?://|ssh://)?(git@)?[^/:]+[:/]##; s#\.git$##; s#/$##' \
+    | tr '[:upper:]' '[:lower:]'
+}
+
+template="$(normalize "$(tr -d '[:space:]' < "$template_source")")"
+target="$(normalize "$remote_url")"
+
+if [ -n "$template" ] && [ "$target" = "$template" ]; then
+  cat >&2 <<MSG
+
+プッシュを止めた。宛先がテンプレート（$template）になっている。
+
+このリポジトリはコンペ用に clone したものなので、コンペの作業を
+テンプレート側に送らない。データの再配布規約に触れる可能性もある。
+
+やること:
+  1. コンペ用のリポジトリを作る（private を推奨）
+  2. git remote set-url origin <自分のリポジトリ>
+  3. もう一度プッシュする
+
+テンプレート本体を直したいなら、テンプレートを別の場所に clone して作業する。
+どうしてもここから送るなら、この hook を外す:
+  git config --unset core.hooksPath
+
+MSG
+  exit 1
+fi
+
+if [ "$remote_name" = "template" ]; then
+  echo "プッシュを止めた。template リモートは取り込み専用（git pull template main）。" >&2
+  exit 1
+fi
+
+exit 0

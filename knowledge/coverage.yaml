@@ -1,0 +1,44 @@
+# 探索の網羅マップ。
+# 「打ち手がない」と言えるのは、ここが全部 saturated か retired になったときだけ。
+# status は expctl saturate が書く。手で saturated にしない。
+#   untouched … 実験が1本も当たっていない
+#   open      … 進行中
+#   saturated … 試し尽くした。以降この軸への tier: exploit はゲートで止まる
+#   retired   … 見込みなしとして畳んだ。理由が saturation.criterion に残る
+
+axes:
+  - id: metric_fidelity
+    note: 公式評価指標と自前実装の一致。ここが崩れていると他の全数値の意味が消える。
+    status: untouched
+  - id: validation
+    note: CV 戦略そのもの。分割の切り方、リークの有無、テストとの分布差。
+    status: untouched
+  - id: preprocessing
+    status: untouched
+  - id: features
+    status: untouched
+  - id: model_family
+    note: 単一モデル族に閉じない。p0 で意図的に雑に3族以上当てる。
+    status: untouched
+  - id: objective
+    note: 損失関数・目的関数。評価指標と一致していないことは多い。
+    status: untouched
+  - id: hyperparameters
+    status: untouched
+  - id: postprocessing
+    note: 閾値最適化、順位の後処理、キャリブレーション。
+    status: untouched
+  - id: ensemble
+    status: untouched
+  - id: external_data
+    status: untouched
+  - id: pseudo_labeling
+    status: untouched
+  - id: data_leak
+    note: リーク、重複、train/test の分布ずれ、時系列の未来参照。
+    status: untouched
+  - id: error_analysis
+    note: どのケースをなぜ外したか。ドメイン知識の主な供給源で、
+          特徴量の着想はここから出る。決定が連続で inconclusive になったら
+          次はこの軸を強制される。
+    status: untouched

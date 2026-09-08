@@ -1,0 +1,64 @@
+# コンペの定義。/init-competition が対話で埋める。
+# ここの metric.verified と lb_noise は、意思決定のゲートが直接読む。
+
+name: TODO
+url: null
+deadline: null
+
+# 評価指標。ローカルの数値が採点を再現しているかどうかは、ここで担保する。
+metric:
+  name: TODO                  # 例: AUC, RMSE, mAP@5
+  direction: TODO             # increase / decrease
+  official_definition: TODO   # 公式ページの定義への URL か引用
+  implementation: TODO        # 自前実装の場所（例: src/metric.py:score）
+  # 公式定義と自前実装の一致をテストで示すまで false。
+  # false の間、打ち切りの決定はゲートで止まる。
+  verified: false
+  verification_test: TODO     # 例: tests/test_metric.py::test_matches_official
+
+# Public LB の差がこれ未満なら結論を出せない、という幅。
+# 見積もり方: 同一予測の再提出の差、または Public のサンプル数からの標準誤差。
+# 0 のままだと「上がらなかった＝効かなかった」という誤読を止められない。
+lb_noise: 0.0
+
+# 現在の段階。expctl status が表示し、tier クォータの配分を決める。
+current_phase: p0_recon
+
+phases:
+  - id: p0_recon
+    goal: 地固め。評価指標の実装一致、テストの作られ方の把握、
+          手法の調査（landscape）と、対象そのものの理解（domain）。手を動かす前に調べる。
+    tier_quota: {exploit: 0.0, explore: 1.0, moonshot: 0.0}
+    exit: metric.verified が true、landscape.yaml と domain.yaml が検証を通る
+  - id: p1_survey
+    goal: モデル族を意図的に雑に走査して、深く掘る先を選ぶ。
+          landscape で有力と分かったものから当てる。
+    tier_quota: {exploit: 0.2, explore: 0.7, moonshot: 0.1}
+    exit: モデル族を3つ以上当て、validation 軸が飽和
+  - id: p2_saturate
+    goal: 選んだパイプラインの可動域を出し切る。ハイパラと既存軸を飽和させる。
+    tier_quota: {exploit: 0.7, explore: 0.3, moonshot: 0.0}
+    exit: hyperparameters と features が飽和宣言済み
+  - id: p3_ideas
+    goal: 飽和した軸の外側へ。新しい打ち手を試せる立場に立っている。
+    tier_quota: {exploit: 0.3, explore: 0.5, moonshot: 0.2}
+    exit: 締切
+
+policy:
+  # 地固め（knowledge/landscape.yaml）に要る量。
+  # これを満たすまで、modeling 系の軸には進めない。
+  landscape_min_sources: 5      # 調べた出典の下限
+  landscape_min_kinds: 2        # 出典の種類の下限（論文だけ・解法だけにしない）
+  landscape_min_transferred: 3  # 在庫に移した出典の下限
+  domain_min_facts: 5           # ドメインの事実の下限
+  domain_min_confirmed: 2       # うち自分で確かめたものの下限
+  inconclusive_streak_limit: 3  # 連続でこれだけ判定できなかったら誤り分析へ
+
+  backlog_min_open: 8         # 未実行アイデアの下限。割ると次の実験に進めない
+  tier_window: 10             # tier 比率を見る窓
+  tier_quota_tolerance: 0.15  # 目標比率からこれ以上ずれたら次の tier を強制
+  cv_trust_min_pairs: 3       # CV を信用してよいと言うのに要る CV-LB ペア数
+  cv_trust_min_spearman: 0.3
+  hit_rate_ceiling: 0.8       # 的中率がこれを超えたら「賭けていない」と警告
+  hit_rate_window: 10
+  cv_noise_fallback: 0.0      # fold の標準誤差が取れないときのノイズ幅

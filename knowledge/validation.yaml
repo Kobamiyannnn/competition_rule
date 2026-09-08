@@ -1,0 +1,23 @@
+# CV 戦略の台帳。ここに書いたことが、あとで全判断の前提になる。
+# 前提は明示して反証条件をつける。暗黙のまま前提にすると、弱い根拠で打ち切る。
+
+strategy:
+  scheme: TODO           # 例: StratifiedKFold(n=5, shuffle, seed=42)
+  reason: TODO           # なぜこの切り方か
+  decided_at: null
+  decided_by_experiment: null
+
+# テストの作られ方について分かっていること。CV がこれを再現できているかが焦点。
+test_construction:
+  known: TODO            # 例: テストは train と別期間、ID の重複なし
+  unknown: TODO          # 分かっていないこと。ここを空にしない
+
+# CV が採点を再現できていないと分かっている点。反証条件つきで書く。
+known_gaps: []
+# - id: g1
+#   statement: |
+#     テストは train より後の期間だが、CV は時系列分割していない。
+#   falsification: |
+#     時系列分割の CV に切り替えて CV-LB 相関が上がらないなら、この gap は原因ではない。
+#   status: open
+#   resolved_by: null
