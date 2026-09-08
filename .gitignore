@@ -46,3 +46,6 @@ optuna.db
 lightning_logs/
 
 # どうしても追跡したいファイルは git add -f で個別に足す。
+
+# uv が作る仮想環境。uv.lock はコミットする（再現性の土台なので）。
+.venv/

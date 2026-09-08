@@ -8,13 +8,13 @@
 #   3. 公開解法・ディスカッション・過去の類似コンペ
 #   4. 未決着の仮説の反証条件（そのまま実験になる）
 #
-# 手で書くより `tools/expctl idea add` を使う。入れる前に検証がかかる。
+# 手で書くより `uv run expctl idea add` を使う。入れる前に検証がかかる。
 # 検証は3点を見る。数だけ揃えても在庫として数えられない。
 #   1. action が20字以上で、1実験の粒度まで割れていること
 #   2. evidence が出典を指すこと（priors/common.md#c01 / exp0003 / dec0002 / URL）
 #   3. 在庫全体が3軸以上に散っていること（同じ発想の変奏で埋めない）
 #
-# 捨てるときは `tools/expctl idea retire <id> --reason ...`（20字以上）。
+# 捨てるときは `uv run expctl idea retire <id> --reason ...`（20字以上）。
 #
 # expected.magnitude と cost は事後に較正される。当てずっぽうを書くと
 # expctl status の「実際/期待」がずれて露見する。

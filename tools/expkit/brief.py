@@ -105,7 +105,7 @@ def _section_recent(state: State) -> list[str]:
 
     return [f"## 直近の実験（全{len(state.experiments)}本のうち新しい{len(exps)}本）", "",
             *body, "",
-            "全件は `tools/expctl table`、1本の中身は `tools/expctl render <exp_id>`。", ""]
+            "全件は `uv run expctl table`、1本の中身は `uv run expctl render <exp_id>`。", ""]
 
 
 def _section_open_decisions(state: State) -> list[str]:
@@ -125,7 +125,7 @@ def _section_open_decisions(state: State) -> list[str]:
             f"{exp.get('direction', '?')} {exp.get('magnitude', '?')}"
         )
     lines += ["", "対応する実験が終わったら "
-              "`tools/expctl decide close <dec_id> --experiment <exp_id>`。", ""]
+              "`uv run expctl decide close <dec_id> --experiment <exp_id>`。", ""]
     return lines
 
 
@@ -235,7 +235,7 @@ def build(state: State, root: Path) -> str:
         "",
         "1. 進行中の実験があるなら、それを終わらせてから次に進む",
         "2. 無いなら `/decide-next` で次の一手を決める",
-        "3. この引き継ぎの数値を信じすぎない。判断の前に `tools/expctl status` を実行する",
+        "3. この引き継ぎの数値を信じすぎない。判断の前に `uv run expctl status` を実行する",
         "",
     ]
     return "\n".join(lines) + "\n"

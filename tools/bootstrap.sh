@@ -26,6 +26,23 @@ if [ ! -d .git ]; then
   exit 2
 fi
 
+# uv を前提にしている。代替経路は用意しない。
+# 代替を持つと「uv が無い環境でだけ挙動が違う」状態が生まれ、
+# 再現性を土台にしているこの基盤では、その状態自体が害になる。
+if ! command -v uv >/dev/null 2>&1; then
+  cat >&2 <<'MSG'
+uv が見つからない。このリポジトリは uv を前提にしている。
+
+  macOS / Linux : curl -LsSf https://astral.sh/uv/install.sh | sh
+  Homebrew      : brew install uv
+  Windows       : powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+
+入れ直してから、もう一度このスクリプトを実行する。
+MSG
+  exit 2
+fi
+echo "== uv: $(uv --version)"
+
 normalize() {
   printf '%s' "$1" \
     | sed -E 's#^(https?://|ssh://)?(git@)?[^/:]+[:/]##; s#\.git$##; s#/$##' \
@@ -82,6 +99,18 @@ if [ ! -f data/README.md ]; then
 コンペのデータはほぼ確実に再配布禁止なので、リポジトリに入れない。
 どこから取ってきたか、どう展開したかは `knowledge/operations.md` に書く。
 MD
+fi
+
+# 依存を入れて、動くことを確かめる。
+echo
+echo "uv sync を実行する。"
+uv sync
+echo
+if uv run expctl --help >/dev/null 2>&1; then
+  echo "expctl が動くことを確認した（uv run expctl status で状態が見られる）。"
+else
+  echo "expctl を実行できなかった。uv sync の出力を確認する。" >&2
+  exit 1
 fi
 
 echo

@@ -6,21 +6,22 @@
 使い方:
     cp templates/experiment_runner.py src/run_exp0001.py
     # TODO を埋めて
-    python3 src/run_exp0001.py --exp exp0001
+    uv run python src/run_exp0001.py --exp exp0001 --n-rows <学習データの行数>
+
+依存を足すときは `uv add lightgbm` のように uv 経由で。
+pip install で入れたものは uv.lock に残らず、その実験は再現できなくなる。
 """
 
 from __future__ import annotations
 
 import argparse
-import sys
 import time
 from pathlib import Path
 
 import numpy as np
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
-
-from expkit import metrics as expmetrics  # noqa: E402
+# expkit は uv sync で入るので、パスをいじる必要はない。
+from expkit import metrics as expmetrics
 
 
 def build_config(args: argparse.Namespace) -> dict:
@@ -93,7 +94,7 @@ def main() -> int:
                 "std": var ** 0.5,
                 "folds": scores,
             },
-            # LB は `tools/expctl lb <exp> --public <score>` で後から差す。
+            # LB は `uv run expctl lb <exp> --public <score>` で後から差す。
             # ここで書くと手入力であることが provenance に残らない。
         },
         config=config,
@@ -103,7 +104,7 @@ def main() -> int:
 
     print(f"{path} を書いた。cv.mean={mean:.5f} std={var ** 0.5:.5f}")
     print(f"次: experiments/{args.exp}/record.yaml を埋めて "
-          f"`tools/expctl lint {args.exp}` を通す。")
+          f"`uv run expctl lint {args.exp}` を通す。")
     return 0
 
 

@@ -22,13 +22,17 @@ description: コンペ用のリポジトリを一度で立ち上げる。competi
 
 ## 手順
 
-### 0. git を付け替える（clone で始めた場合）
+### 0. 環境を整える（clone で始めた場合）
 
 まだやっていなければ、最初にこれを実行する。
 
 ```
 bash tools/bootstrap.sh
 ```
+
+uv が無ければここで止まり、入れ方を案内する。**代替経路は用意していない。**
+用意すると「uv が無い環境でだけ挙動が違う」状態が生まれ、
+再現性を土台にしているこの基盤ではそれ自体が害になる。
 
 やること。
 
@@ -41,10 +45,11 @@ bash tools/bootstrap.sh
 ただし `git pull template main` でテンプレートの更新を取り込めなくなる。
 
 GitHub の「Use this template」で始めた場合は、履歴も `origin` も
-最初から正しいので、hook の有効化だけやる。
+最初から正しいので、hook の有効化と依存の導入だけやる。
 
 ```
 git config core.hooksPath tools/githooks
+uv sync
 ```
 
 **コンペのデータをコミットしない。** 規約でほぼ確実に再配布禁止になっている。
@@ -61,11 +66,24 @@ git config core.hooksPath tools/githooks
 - train と test の分かれ方について分かっていること
 - 締切、提出回数の上限、外部データの可否
 - 実行環境（GPU の有無、1実験にかけられる時間）
+- 使う予定のライブラリ（後で `uv add` で足す）
 
 URL があるなら公式ページと規約を読みに行く。読めたなら、読んだ内容を
 `competition.yaml` に写す。読めなかったなら、その旨を TODO として残す。
 
-### 2. competition.yaml を埋める
+### 2. ライブラリを入れて competition.yaml を埋める
+
+コンペで使うライブラリは `uv add` で入れる。
+
+```
+uv add numpy pandas scikit-learn lightgbm
+```
+
+**`pip install` は使わない。** `uv.lock` に残らないと、その実験は再現できない。
+`metrics.json` が `uv.lock` の指紋を記録するので、後から
+「この実験と同じ依存で回っているか」を1つの値で照合できる。
+
+そのうえで `competition.yaml` を埋める。
 
 `metric.verified` は **必ず false のままにする**。ここを true にできるのは、
 指標の自前実装が公式定義と一致することをテストで示したときだけ。
@@ -106,8 +124,8 @@ URL があるなら公式ページと規約を読みに行く。読めたなら�
 済んだかどうかは機械で判定する。
 
 ```
-tools/expctl lint landscape
-tools/expctl landscape check
+uv run expctl lint landscape
+uv run expctl landscape check
 ```
 
 ### 6. ドメイン知識を貯め始める
@@ -127,7 +145,7 @@ tools/expctl landscape check
 下限は事実5件、うち自分で確かめたもの2件。
 
 ```
-tools/expctl lint domain
+uv run expctl lint domain
 ```
 
 ### 7. アイデア在庫を仕込む
@@ -146,7 +164,7 @@ landscape 由来を最低3件は入れる（`landscape_min_transferred`）。
 入れる前に検証がかかるので、通らない項目が在庫に混ざらない。
 
 ```
-tools/expctl idea add \
+uv run expctl idea add \
   --action "ユーザ単位の集約特徴（購入額の mean / std / count）を12列作り、既存の特徴集合に足す。" \
   --axes features --tier explore --magnitude 0.003 \
   --evidence "priors/tabular.md#t03" --cost 1.0
@@ -165,14 +183,14 @@ tools/expctl idea add \
 - 1件は1実験で試せる粒度まで割る。「特徴量エンジニアリング」は粒度が粗すぎる。
 
 順序は `expected.magnitude / cost` の降順になるよう意識する。
-`tools/expctl idea list` で確認できる。
+`uv run expctl idea list` で確認できる。
 
 ### 8. 最初の実験を立てる
 
 最初の実験は**必ず** `metric_fidelity` 軸にする。
 
 ```
-tools/expctl new --tier explore --axes metric_fidelity
+uv run expctl new --tier explore --axes metric_fidelity
 ```
 
 この実験でやること。
@@ -193,7 +211,7 @@ tools/expctl new --tier explore --axes metric_fidelity
 ### 10. 確認する
 
 ```
-tools/expctl status
+uv run expctl status
 ```
 
 phase・指標検証・網羅・在庫が想定通りか見る。
@@ -206,6 +224,8 @@ phase・指標検証・網羅・在庫が想定通りか見る。
 - **`metric.verified` を先に true にしない。** ここが検証の土台。
 - **在庫を8件未満で終わらせない。** 在庫が薄いと、序盤から打ち手が尽きた
   ように見えて保守化する。
+- **`pip install` を使わない。** `uv add` で入れる。lock に残らない依存で
+  回した実験は再現できず、`metrics.json` の指紋も意味を失う。
 - **地固めを飛ばして実験に入らない。** 5 と 6 を飛ばすと、`priors/` の汎用な
   打ち手を順に試すだけの進行になる。それは誰がやっても同じ結果にしかならない。
 - **確かめていないことを `confirmed` と書かない。** 未検証の仮定が前提として

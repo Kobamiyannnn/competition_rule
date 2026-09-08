@@ -94,7 +94,7 @@ task:
 調べただけでは打ち手にならない。`takeaway` を1実験の粒度に割って在庫に入れる。
 
 ```
-tools/expctl idea add \
+uv run expctl idea add \
   --action "患者単位の StratifiedGroupKFold に切り替え、画像単位分割との CV-LB gap を比べる。" \
   --axes validation --tier explore --magnitude 0.01 \
   --evidence "s0003" --cost 0.8
@@ -108,8 +108,8 @@ action は「このコンペで何をするか」。そのまま写すと粒度�
 ### 6. 確かめる
 
 ```
-tools/expctl lint landscape        # スキーマと語彙と量
-tools/expctl landscape check       # URL が実在するか
+uv run expctl lint landscape        # スキーマと語彙と量
+uv run expctl landscape check       # URL が実在するか
 ```
 
 両方通ったら地固めは済み。`expctl status` の「地固め」が「済」になり、

@@ -156,7 +156,7 @@ def recon_findings(state: State) -> list[GateFinding]:
             gate="recon.landscape_incomplete", severity="error",
             message=f"地固め（手法の調査）が済んでいない（{len(errors)} 件）。"
                     f"{' '.join(head.split())}"
-                    f" 詳細は `tools/expctl lint landscape`。規則: {', '.join(rules[:4])}",
+                    f" 詳細は `uv run expctl lint landscape`。規則: {', '.join(rules[:4])}",
         ))
 
     per_fact, dwhole = lint_domain(
@@ -170,7 +170,7 @@ def recon_findings(state: State) -> list[GateFinding]:
         out.append(GateFinding(
             gate="recon.domain_incomplete", severity="error",
             message=f"ドメイン知識が足りない（{len(derrors)} 件）。{' '.join(head.split())}"
-                    f" 詳細は `tools/expctl lint domain`。規則: {', '.join(rules[:4])}",
+                    f" 詳細は `uv run expctl lint domain`。規則: {', '.join(rules[:4])}",
         ))
     return out
 
@@ -309,7 +309,7 @@ def gate_backlog(state: State) -> list[GateFinding]:
         out.append(GateFinding(
             gate="backlog.invalid_entries", severity="error",
             message=f"検証を通らないアイデアが {len(bad)} 件あり、在庫として数えていない: {ids}。"
-                    " `tools/expctl lint backlog` で理由を見る。",
+                    " `uv run expctl lint backlog` で理由を見る。",
         ))
 
     if len(good) < minimum:
