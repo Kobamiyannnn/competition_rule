@@ -149,3 +149,42 @@ class TestWaiver:
             observation="cv.mean は ${metrics.cv.mean}。よく効いた。",
             lint_waived=[{"rule": "vocab.metaphor", "reason": "都合"}]))
         assert "waiver.thin_reason" in _lint(repo, "exp0001")
+
+
+class TestBypassGuards:
+    """規範を迂回する経路を塞ぐ。
+
+    Write / Edit を使わずに書けば PostToolUse hook は発火しないし、
+    ディレクトリを手で作ればゲートは一度も評価されない。
+    迂回そのものは完全には防げないが、省略ではなく明示的な行為にする。
+    """
+
+    def test_hand_made_experiment_is_rejected(self, repo: Path) -> None:
+        """expctl new を通っていない実験を通さない。"""
+        doc = base_record("exp0001")
+        del doc["created_by"]
+        make_experiment(repo, "exp0001", cv_mean=0.87, record=doc)
+        assert "schema.missing" in _lint(repo, "exp0001")
+
+    def test_forced_gate_needs_a_reason(self, repo: Path) -> None:
+        """語彙の waive には20字要求しているのに、押し切りは素通りだった。"""
+        make_experiment(repo, "exp0001", cv_mean=0.87, record=base_record(
+            "exp0001",
+            gates_forced=[{"gate": "backlog.thin", "message": "在庫が足りない",
+                           "reason": "急ぐ"}]))
+        assert "force.thin_reason" in _lint(repo, "exp0001")
+
+    def test_forced_gate_with_a_reason_passes(self, repo: Path) -> None:
+        make_experiment(repo, "exp0001", cv_mean=0.87, record=base_record(
+            "exp0001",
+            gates_forced=[{
+                "gate": "backlog.thin", "message": "在庫が足りない",
+                "reason": "締切当日で在庫を補充する時間が無く、"
+                          "既に決めていた最後の提出だけを作るため。"}]))
+        assert _lint(repo, "exp0001") == []
+
+    def test_forced_gate_needs_a_gate_name(self, repo: Path) -> None:
+        make_experiment(repo, "exp0001", cv_mean=0.87, record=base_record(
+            "exp0001",
+            gates_forced=[{"reason": "締切当日で在庫を補充する時間が無かったため。"}]))
+        assert "schema.missing" in _lint(repo, "exp0001")

@@ -14,7 +14,7 @@ from pathlib import Path
 import yaml
 
 from . import events, metrics as metrics_mod
-from .config import load_lint_config
+from .config import load_competition, load_lint_config
 from .gates import (
     calibration,
     inconclusive_streak,
@@ -155,6 +155,8 @@ def cmd_new(args: argparse.Namespace) -> int:
                 forced.append(f"  - gate: {f.gate}")
                 forced.append("    message: |")
                 forced.append(f"      {msg}")
+                forced.append("    reason: |")
+                forced.append(f"      {args.reason or 'TODO: なぜ押し切ったのかを20字以上で書く'}")
         text += "\n".join(forced) + "\n"
 
     path.write_text(text, encoding="utf-8")
@@ -258,6 +260,15 @@ def cmd_lint(args: argparse.Namespace) -> int:
             e = next((x for x in state.experiments if x.id == t), None)
             if e:
                 lint_one_experiment(e)
+                continue
+            if t == "records":
+                # 実験と決定だけ。台帳（landscape / domain / backlog）は
+                # それぞれのゲートが進行を止めるので、未記入でも害が出ない。
+                for e in state.experiments:
+                    lint_one_experiment(e)
+                if decisions_dir(root).exists():
+                    for f in sorted(decisions_dir(root).glob("*.yaml")):
+                        lint_one_decision(_load_yaml(f), f.stem)
                 continue
             if t in ("backlog", "ideas"):
                 lint_the_backlog()
@@ -404,8 +415,25 @@ def cmd_table(args: argparse.Namespace) -> int:
     return 0
 
 
+def _find_submission(root: Path, exp_id: str, explicit: str | None,
+                     extension: str) -> Path | None:
+    if explicit:
+        p = Path(explicit)
+        return p if p.exists() else None
+    for ext in (extension, "csv", "tsv", "parquet", "zip", "gz"):
+        candidate = root / "submissions" / f"{exp_id}.{ext.lstrip('.')}"
+        if candidate.exists():
+            return candidate
+    return None
+
+
 def cmd_lb(args: argparse.Namespace) -> int:
     root = repo_root()
+    comp = load_competition(root)
+    submission_cfg = comp.get("submission") or {}
+    kind = submission_cfg.get("kind")
+    extension = str(submission_cfg.get("extension") or "csv")
+
     metrics_mod.annotate(
         args.experiment, path="metrics.lb.public", value=float(args.public),
         by="expctl lb", root=root,
@@ -415,7 +443,33 @@ def cmd_lb(args: argparse.Namespace) -> int:
             args.experiment, path="metrics.lb.private", value=float(args.private),
             by="expctl lb", root=root,
         )
-    print(f"{args.experiment}: LB を記録した（手入力として provenance に残る）。")
+
+    # 提出ファイルの指紋を残す。重みも提出物も git に入れないので、
+    # これが無いと「このスコアを出したのはどのファイルか」を
+    # 実験を回し直すまで確かめられない。
+    path = _find_submission(root, args.experiment, args.file, extension)
+    if path is not None:
+        info = metrics_mod.fingerprint_submission(path)
+        metrics_mod.annotate(
+            args.experiment, path="metrics.lb.submission", value=info,
+            by="expctl lb", root=root,
+        )
+        rows = f" / {info['rows']} 行" if "rows" in info else ""
+        print(f"{args.experiment}: LB を記録した。"
+              f" 提出ファイル {path.name}（sha256 {info['sha256'][:12]}…{rows}）も照合できる。")
+    elif kind == "notebook":
+        print(f"{args.experiment}: LB を記録した"
+              f"（notebook 提出なのでローカルに提出ファイルは無い）。")
+    else:
+        print(f"{args.experiment}: LB を記録した。")
+        hint = "TODO" if kind in (None, "TODO") else kind
+        print(f"{DIM}提出ファイルが見つからない"
+              f"（submissions/{args.experiment}.{extension}）。"
+              f" 置いておくと sha256 と行数が記録され、"
+              f"「このスコアを出したのはどのファイルか」を後から照合できる。"
+              f" notebook 提出なら competition.yaml の submission.kind を"
+              f" notebook にする（いま {hint}）。{RESET}")
+
     return cmd_cvlb(argparse.Namespace())
 
 
@@ -662,6 +716,71 @@ def _mark_idea(root: Path, idea_id: str, *, status: str, experiment: str | None)
             return
 
 
+def cmd_doctor(args: argparse.Namespace) -> int:
+    """この端末が使える状態になっているかを確かめる。
+
+    別の端末で clone したときに何が足りないかを1つずつ出す。
+    記録は git で運べるが、端末ごとの設定は運べない。
+    """
+    import shutil
+    import subprocess
+
+    root = repo_root()
+    problems: list[tuple[str, str]] = []
+    ok: list[str] = []
+
+    if shutil.which("uv") is None:
+        problems.append((
+            "uv が入っていない",
+            "curl -LsSf https://astral.sh/uv/install.sh | sh",
+        ))
+    else:
+        ok.append("uv が入っている")
+
+    # git の hooksPath はローカル設定なので clone しても引き継がれない。
+    # ここが空だと、テンプレートへの誤プッシュを止めるガードが黙って無効になる。
+    hooks_path = ""
+    try:
+        out = subprocess.run(["git", "config", "core.hooksPath"],
+                             cwd=root, capture_output=True, text=True, timeout=10)
+        hooks_path = out.stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        pass
+    if hooks_path != "tools/githooks":
+        problems.append((
+            "pre-push hook が無効（テンプレートへの誤プッシュを止められない）",
+            "git config core.hooksPath tools/githooks",
+        ))
+    else:
+        ok.append("pre-push hook が有効")
+
+    if not (root / ".venv").exists():
+        problems.append(("依存が入っていない", "uv sync"))
+    else:
+        ok.append("依存が入っている")
+
+    if not (root / "data").exists():
+        problems.append((
+            "data/ が無い（コンペのデータは git で運ばない）",
+            "knowledge/operations.md の取得手順を見る",
+        ))
+    else:
+        ok.append("data/ がある")
+
+    for line in ok:
+        print(f"  ok   {line}")
+    if not problems:
+        print("\nこの端末は使える状態になっている。")
+        return 0
+
+    print()
+    for what, how in problems:
+        print(f"{BOLD}  要対応{RESET} {what}")
+        print(f"         → {how}")
+    print("\nまとめて直すなら: bash tools/bootstrap.sh")
+    return 1
+
+
 def _proposals_path(root: Path) -> Path:
     return root / "feedback" / "proposals.yaml"
 
@@ -853,10 +972,14 @@ def build_parser() -> argparse.ArgumentParser:
     n.add_argument("--idea", default=None)
     n.add_argument("--id", default=None)
     n.add_argument("--force", action="store_true", help="ゲートを押し切る")
+    n.add_argument("--reason", default=None,
+                   help="--force のとき、なぜ押し切るのか（20字以上。lint が要求する）")
     n.set_defaults(func=cmd_new)
 
     l = sub.add_parser("lint", help="記録と決定を検査する")
-    l.add_argument("targets", nargs="*", help="実験ID / 決定ID / ファイルパス。省略で全件")
+    l.add_argument("targets", nargs="*",
+                   help="実験ID / 決定ID / ファイルパス / records / backlog / landscape / "
+                        "domain / proposals。省略で全件")
     l.add_argument("-v", "--verbose", action="store_true")
     l.set_defaults(func=cmd_lint)
 
@@ -871,6 +994,8 @@ def build_parser() -> argparse.ArgumentParser:
     b.add_argument("experiment")
     b.add_argument("--public", required=True)
     b.add_argument("--private", default=None)
+    b.add_argument("--file", default=None,
+                   help="提出ファイルの場所。省略すると submissions/<実験ID>.<拡張子> を探す")
     b.set_defaults(func=cmd_lb)
 
     c = sub.add_parser("cvlb", help="CV-LB 対応表と信頼性判定を更新する")
@@ -927,6 +1052,9 @@ def build_parser() -> argparse.ArgumentParser:
     lc = lsub.add_parser("check", help="出典の URL が実在するかを確かめる")
     lc.add_argument("--timeout", type=float, default=10.0)
     lc.set_defaults(func=cmd_landscape_check)
+
+    dr = sub.add_parser("doctor", help="この端末が使える状態か確かめる")
+    dr.set_defaults(func=cmd_doctor)
 
     pr = sub.add_parser("propose", help="基盤そのものへの改善提案を残す")
     pr.add_argument("--kind", required=True,

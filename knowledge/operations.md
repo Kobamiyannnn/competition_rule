@@ -33,6 +33,13 @@
 # uv.lock に残らないと、その実験は再現できない。
 ```
 
+## 提出
+
+TODO: 提出ファイルの作り方と出し方。
+例: uv run python src/submit.py --exp exp0007  → submissions/exp0007.csv
+    kaggle competitions submit -c <slug> -f submissions/exp0007.csv -m exp0007
+    そのあと uv run expctl lb exp0007 --public <score>
+
 ## 環境
 
 TODO: メモリ・GPU・並列数の上限、データの場所

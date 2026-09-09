@@ -4,6 +4,15 @@
 記述欄からは ${metrics.cv.mean} のような参照でしか触れない。
 書き込みのたびに integrity ハッシュを付け直し、lint が照合する。
 手で編集すればハッシュがずれ、lint が落ちる。
+
+**このハッシュが防ぐのは事故であって、意図的な改竄ではない。**
+digest() は公開関数なので、値を書き換えてから付け直せば verify は通る。
+守れるのは「うっかり手で直した」「別のツールが書き換えた」までで、
+数値を作りたい相手は止められない。
+
+意図的な改竄に対する本当の防御は git の履歴。実験のたびにコミットしていれば、
+数値の書き換えは差分に出る。PreCompact hook が未コミットの記録を指摘するのは
+そのため。
 """
 
 from __future__ import annotations
@@ -70,6 +79,25 @@ def _lock_info(root: Path) -> dict | None:
         "file": "uv.lock",
         "sha256": hashlib.sha256(lock.read_bytes()).hexdigest(),
     }
+
+
+def fingerprint_submission(path: Path) -> dict:
+    """提出ファイルの指紋。
+
+    「LB 0.8734 を出したのはどのファイルか」を後から照合できるようにする。
+    重みも提出物も git に入れないので、これが無いと実験を回し直すまで確かめられない。
+    行数も見るのは、途中で切れたファイルを出す事故がよくあるため。
+    """
+    data = path.read_bytes()
+    info: dict = {
+        "file": path.name,
+        "sha256": hashlib.sha256(data).hexdigest(),
+        "bytes": len(data),
+    }
+    if path.suffix.lower() in (".csv", ".tsv", ".txt"):
+        # ヘッダを除いた行数。末尾の改行は数えない。
+        info["rows"] = max(0, data.count(b"\n") - (0 if data.endswith(b"\n") else -1) - 1)
+    return info
 
 
 def _env_info() -> dict:

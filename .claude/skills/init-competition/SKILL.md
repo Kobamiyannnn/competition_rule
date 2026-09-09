@@ -65,6 +65,8 @@ uv sync
 - データの形式（テーブル / テキスト / 画像 / 音声 / 時系列 / その他）
 - train と test の分かれ方について分かっていること
 - 締切、提出回数の上限、外部データの可否
+- **提出の形式** — csv などを自分で作ってアップロードするのか（`file`）、
+  Kaggle 側でノートブックが実行されるのか（`notebook`）
 - 実行環境（GPU の有無、1実験にかけられる時間）
 - 使う予定のライブラリ（後で `uv add` で足す）
 
@@ -84,6 +86,11 @@ uv add numpy pandas scikit-learn lightgbm
 「この実験と同じ依存で回っているか」を1つの値で照合できる。
 
 そのうえで `competition.yaml` を埋める。
+
+`submission.kind` を `file` か `notebook` のどちらかにする。
+`file` なら提出物を `submissions/<実験ID>.csv` に置く規約になり、
+`expctl lb` がその sha256 と行数を記録する。
+`notebook` なら提出ファイルを探さなくなる。
 
 `metric.verified` は **必ず false のままにする**。ここを true にできるのは、
 指標の自前実装が公式定義と一致することをテストで示したときだけ。

@@ -88,16 +88,45 @@ echo
 echo "pre-push hook を有効にした（core.hooksPath=tools/githooks）。"
 echo "  テンプレート宛のプッシュは止まる。"
 
-# コンペのデータ置き場。.gitignore でコミット対象から外してある。
-mkdir -p data
+# コンペのデータ置き場と提出物置き場。.gitignore でコミット対象から外してある。
+mkdir -p data submissions
 if [ ! -f data/README.md ]; then
   cat > data/README.md <<'MD'
 # データ置き場
 
-ここに置いたものは `.gitignore` でコミット対象から外れている。
+**コンペから受け取ったデータ**をここに置く。`.gitignore` で除外してある。
 
-コンペのデータはほぼ確実に再配布禁止なので、リポジトリに入れない。
+ほぼ確実に再配布禁止なので、リポジトリに入れない。
 どこから取ってきたか、どう展開したかは `knowledge/operations.md` に書く。
+
+自分で作った出力（提出物・中間生成物）はここではなく `submissions/` や
+`output/` に置く。そちらは再配布禁止の対象ではない。
+MD
+fi
+if [ ! -f submissions/README.md ]; then
+  cat > submissions/README.md <<'MD'
+# 提出物置き場
+
+ここに置いたものは既定で `.gitignore` から外れている。
+ただし**再配布禁止が理由ではない**。提出物はコンペのデータではなく、自分の予測。
+
+除外しているのは、開催中の公開リポジトリに置くと多くのコンペで禁止されている
+「チーム外への共有」に当たりうるため。リポジトリの可視性はテンプレート側から
+判別できないので安全側に倒してある。
+**private なリポジトリなら `.gitignore` から `submissions/` を外してよい。**
+
+**`<実験ID>.csv` の名前で置く**（例: `exp0007.csv`）。
+`uv run expctl lb exp0007 --public 0.8734` がその名前でファイルを探し、
+sha256 と行数を `metrics.json` に記録する。
+
+なぜ指紋を残すか。モデルの重みも提出物も git に入れないので、
+これが無いと「LB 0.8734 を出したのはどのファイルか」を
+実験を回し直すまで確かめられない。行数も見るのは、
+途中で切れたファイルを出す事故がよくあるため。
+
+Kaggle の Code Competition のようにノートブックが実行される形式なら、
+ここは空のままでよい。`competition.yaml` の `submission.kind` を
+`notebook` にすると、`expctl lb` が提出ファイルを探さなくなる。
 MD
 fi
 

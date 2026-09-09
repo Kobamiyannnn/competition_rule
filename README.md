@@ -60,6 +60,26 @@ git remote add origin <自分のリポジトリ>   # private を推奨
 
 履歴ごと捨てるなら `--fresh`（テンプレートの更新は取り込めなくなる）。
 
+### 別の端末で続きをやる
+
+**記録は git で運べるが、端末ごとの設定は運べない。** clone しただけでは
+`core.hooksPath` が空のままで、テンプレートへの誤プッシュを止めるガードが無効になる。
+
+```bash
+git clone <自分のコンペリポジトリ> && cd <それ>
+bash tools/bootstrap.sh        # hooksPath の設定と uv sync
+```
+
+`bootstrap.sh` は origin がテンプレートを指していないことを見て、
+改名は飛ばし、設定と依存の導入だけをやる。
+
+足りないものは `uv run expctl doctor` でいつでも確認できる。
+Claude Code を開いたときも、設定が足りなければ引き継ぎの冒頭で警告が出る。
+
+データ（`data/`）は git に入らないので、`knowledge/operations.md` の
+取得手順を見て入れ直す。摩擦の記録（`.expkit/`）も端末ごとなので、
+`expctl feedback` はその端末で起きた分しか集計しない。
+
 ### 立ち上げる
 
 ```bash
@@ -104,6 +124,7 @@ phase は `p0_recon` → `p1_survey` → `p2_saturate` → `p3_ideas` の順に�
 
 | コマンド | 用途 |
 |---|---|
+| `expctl doctor` | この端末が使える状態か確かめる（別の端末で clone した直後に） |
 | `expctl status` | phase・地固め・網羅・CV信頼性・tier配分・較正・消極性 |
 | `expctl brief` | 引き継ぎ。セッション開始時に hook が自動で走らせる |
 | `expctl new` | 実験を立てる（ゲート判定を通してから） |
@@ -126,7 +147,7 @@ phase は `p0_recon` → `p1_survey` → `p2_saturate` → `p3_ideas` の順に�
 pyproject.toml             依存とコマンド定義。uv add でコンペのライブラリを足す
 uv.lock                    依存の固定。コミットする（再現性の土台）
 .python-version            Python の版の固定
-competition.yaml           コンペ定義。指標・ノイズ幅・phase・policy
+competition.yaml           コンペ定義。指標・提出形式・ノイズ幅・phase・policy
 lint.yaml                  語彙規則と字数上限の上書き（任意）
 CLAUDE.md                  /init-competition が生成する作業規範
 
@@ -146,14 +167,14 @@ knowledge/
   priors/                  種別別の実績ある打ち手（汎用）
 reports/
   conclusion.md            人が書く唯一の欄。600字、lint あり
-  report.md                expctl report が生成。手で編集しない
+  report.md                expctl report が生成。手で編集しない（コミットはする）
 
 tools/
   expkit/                  lint・ゲート・状態集計・引き継ぎ・レポート生成（uv run expctl）
   hooks/                   記録の lint 強制、metrics.json 保護、引き継ぎ注入
   githooks/pre-push        テンプレートへの誤プッシュ防止
   bootstrap.sh             clone 直後の git 付け替え
-  tests/                   211件
+  tests/                   248件
 templates/                 実験スクリプトと CLAUDE.md の雛形
 ```
 
@@ -171,14 +192,37 @@ templates/                 実験スクリプトと CLAUDE.md の雛形
 
 ## 気をつけること
 
-**データをコミットしない。** コンペのデータは規約でほぼ確実に再配布禁止。
-`.gitignore` で `data/` `input/` `output/` `submissions/` と `*.csv` `*.parquet`
-`*.pkl` `*.pt` などを除外してある。取得元と展開手順は
+**コンペから受け取ったデータはコミットしない。** 規約でほぼ確実に再配布禁止。
+`data/` と `input/` を `.gitignore` で除外してある。取得元と展開手順は
 `knowledge/operations.md` に書き、データそのものは置かない。
 
-**抜け道は記録に残る。** 語彙規則は `lint_waived`（規則名と20字以上の理由）、
-ゲートは `--force`（押し切った内容が `record.yaml` に残る）で抜けられる。
-反証条件・改竄検知・スキーマ・参照解決の4つは抜けられない。
+**提出物は `submissions/<実験ID>.csv` に置く。** `expctl lb exp0007 --public 0.8734`
+がその名前でファイルを探し、sha256 と行数を `metrics.json` に記録する。
+Code Competition のようにノートブックが実行される形式なら
+`competition.yaml` の `submission.kind` を `notebook` にすると探さなくなる。
+
+`submissions/` も既定では `.gitignore` に入れてあるが、**理由は再配布禁止ではない。**
+提出物はあなたの予測であって、コンペのデータではない。除外しているのは、
+開催中の公開リポジトリに置くと多くのコンペで禁止されている「チーム外への共有」に
+当たりうるからで、リポジトリの可視性はテンプレート側から判別できないため
+安全側に倒してある。**private なリポジトリなら `.gitignore` から外してよい。**
+そうすれば同じ提出を実験の回し直しなしで再現できる。
+
+外さない場合も、指紋が残っているので「手元のファイルが当時のものか」は照合できる。
+
+**記録は除外されない。** `record.yaml` / `metrics.json` / `decisions/` /
+`knowledge/` / `feedback/` / `uv.lock` はそのままコミットされる。
+`*.csv` を一括で除外しているので、自分で書いた小さな対照表などを追跡したいときは
+`git add -f` で個別に足す。
+
+**抜け道は記録に残る。** 語彙規則は `lint_waived`、ゲートは `--force --reason` で抜けられる。
+**どちらも20字以上の理由が要る。** 反証条件・改竄検知・スキーマ・参照解決の
+4つは抜けられない。
+
+規範の強制は「迂回を不可能にする」ものではなく、**迂回を明示的な行為にする**もの。
+Bash で書いた記録もターン終了時の Stop hook で検査され、手で作った実験は
+`created_by` が無いことで落ちる。決意した相手は止められないが、
+うっかりと手抜きは止まる。詳しくは [`docs/design.md`](docs/design.md)。
 
 **基盤が邪魔をしたら記録する。** ゲートを `--force` で押し切った、`lint_waived` を
 使った、記録したいことに置き場所が無かった — そういう場面は

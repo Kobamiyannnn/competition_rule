@@ -47,6 +47,28 @@ def _initialized(root: Path) -> bool:
     return False
 
 
+def _setup_warnings(root: Path) -> list[str]:
+    """端末ごとの設定は git で運べない。足りないものを警告する。
+
+    特に core.hooksPath は、空のままだとテンプレートへの誤プッシュを
+    止めるガードが黙って無効になる。別の端末で clone したときに起きる。
+    """
+    warnings: list[str] = []
+    try:
+        out = subprocess.run(["git", "config", "core.hooksPath"],
+                             cwd=root, capture_output=True, text=True, timeout=10)
+        if out.stdout.strip() != "tools/githooks":
+            warnings.append(
+                "**pre-push hook が無効になっている。**"
+                " テンプレートへの誤プッシュを止められない状態。"
+                " `bash tools/bootstrap.sh` を実行する"
+                "（または `git config core.hooksPath tools/githooks`）。"
+            )
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return warnings
+
+
 def _brief(root: Path) -> str | None:
     try:
         out = run_expctl(root, ["brief"])
@@ -77,6 +99,12 @@ def session_start(payload: dict) -> int:
     text = _brief(root)
     if not text:
         return 0
+
+    warnings = _setup_warnings(root)
+    if warnings:
+        text = ("## この端末の設定が足りない\n\n"
+                + "\n".join(f"- {w}" for w in warnings)
+                + "\n\n詳しくは `uv run expctl doctor`。\n\n" + text)
 
     if payload.get("source") == "compact":
         text = ("（compact 直後。以下はファイルから読み直した状態であり、"
