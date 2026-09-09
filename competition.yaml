@@ -16,6 +16,17 @@ metric:
   verified: false
   verification_test: TODO     # 例: tests/test_metric.py::test_matches_official
 
+# 提出の形式。expctl lb がこれを見て、提出ファイルの照合をするかどうか決める。
+submission:
+  # file     … csv などを自分で作ってアップロードする
+  # notebook … Kaggle 側でノートブックが実行される（ローカルに提出物が残らない）
+  kind: TODO
+  # kind: file のとき、提出ファイルを submissions/<実験ID>.csv に置く。
+  # expctl lb がその sha256 と行数を metrics.json に記録するので、
+  # 「LB 0.8734 を出したのはどのファイルか」が後から照合できる。
+  # 拡張子が csv 以外なら書き換える。
+  extension: csv
+
 # Public LB の差がこれ未満なら結論を出せない、という幅。
 # 見積もり方: 同一予測の再提出の差、または Public のサンプル数からの標準誤差。
 # 0 のままだと「上がらなかった＝効かなかった」という誤読を止められない。

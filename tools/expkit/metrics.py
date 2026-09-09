@@ -72,6 +72,25 @@ def _lock_info(root: Path) -> dict | None:
     }
 
 
+def fingerprint_submission(path: Path) -> dict:
+    """提出ファイルの指紋。
+
+    「LB 0.8734 を出したのはどのファイルか」を後から照合できるようにする。
+    重みも提出物も git に入れないので、これが無いと実験を回し直すまで確かめられない。
+    行数も見るのは、途中で切れたファイルを出す事故がよくあるため。
+    """
+    data = path.read_bytes()
+    info: dict = {
+        "file": path.name,
+        "sha256": hashlib.sha256(data).hexdigest(),
+        "bytes": len(data),
+    }
+    if path.suffix.lower() in (".csv", ".tsv", ".txt"):
+        # ヘッダを除いた行数。末尾の改行は数えない。
+        info["rows"] = max(0, data.count(b"\n") - (0 if data.endswith(b"\n") else -1) - 1)
+    return info
+
+
 def _env_info() -> dict:
     packages: dict[str, str] = {}
     try:

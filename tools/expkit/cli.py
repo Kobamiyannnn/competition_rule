@@ -14,7 +14,7 @@ from pathlib import Path
 import yaml
 
 from . import events, metrics as metrics_mod
-from .config import load_lint_config
+from .config import load_competition, load_lint_config
 from .gates import (
     calibration,
     inconclusive_streak,
@@ -404,8 +404,25 @@ def cmd_table(args: argparse.Namespace) -> int:
     return 0
 
 
+def _find_submission(root: Path, exp_id: str, explicit: str | None,
+                     extension: str) -> Path | None:
+    if explicit:
+        p = Path(explicit)
+        return p if p.exists() else None
+    for ext in (extension, "csv", "tsv", "parquet", "zip", "gz"):
+        candidate = root / "submissions" / f"{exp_id}.{ext.lstrip('.')}"
+        if candidate.exists():
+            return candidate
+    return None
+
+
 def cmd_lb(args: argparse.Namespace) -> int:
     root = repo_root()
+    comp = load_competition(root)
+    submission_cfg = comp.get("submission") or {}
+    kind = submission_cfg.get("kind")
+    extension = str(submission_cfg.get("extension") or "csv")
+
     metrics_mod.annotate(
         args.experiment, path="metrics.lb.public", value=float(args.public),
         by="expctl lb", root=root,
@@ -415,7 +432,33 @@ def cmd_lb(args: argparse.Namespace) -> int:
             args.experiment, path="metrics.lb.private", value=float(args.private),
             by="expctl lb", root=root,
         )
-    print(f"{args.experiment}: LB を記録した（手入力として provenance に残る）。")
+
+    # 提出ファイルの指紋を残す。重みも提出物も git に入れないので、
+    # これが無いと「このスコアを出したのはどのファイルか」を
+    # 実験を回し直すまで確かめられない。
+    path = _find_submission(root, args.experiment, args.file, extension)
+    if path is not None:
+        info = metrics_mod.fingerprint_submission(path)
+        metrics_mod.annotate(
+            args.experiment, path="metrics.lb.submission", value=info,
+            by="expctl lb", root=root,
+        )
+        rows = f" / {info['rows']} 行" if "rows" in info else ""
+        print(f"{args.experiment}: LB を記録した。"
+              f" 提出ファイル {path.name}（sha256 {info['sha256'][:12]}…{rows}）も照合できる。")
+    elif kind == "notebook":
+        print(f"{args.experiment}: LB を記録した"
+              f"（notebook 提出なのでローカルに提出ファイルは無い）。")
+    else:
+        print(f"{args.experiment}: LB を記録した。")
+        hint = "TODO" if kind in (None, "TODO") else kind
+        print(f"{DIM}提出ファイルが見つからない"
+              f"（submissions/{args.experiment}.{extension}）。"
+              f" 置いておくと sha256 と行数が記録され、"
+              f"「このスコアを出したのはどのファイルか」を後から照合できる。"
+              f" notebook 提出なら competition.yaml の submission.kind を"
+              f" notebook にする（いま {hint}）。{RESET}")
+
     return cmd_cvlb(argparse.Namespace())
 
 
@@ -936,6 +979,8 @@ def build_parser() -> argparse.ArgumentParser:
     b.add_argument("experiment")
     b.add_argument("--public", required=True)
     b.add_argument("--private", default=None)
+    b.add_argument("--file", default=None,
+                   help="提出ファイルの場所。省略すると submissions/<実験ID>.<拡張子> を探す")
     b.set_defaults(func=cmd_lb)
 
     c = sub.add_parser("cvlb", help="CV-LB 対応表と信頼性判定を更新する")

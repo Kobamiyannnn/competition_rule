@@ -41,20 +41,40 @@ def test_records_are_tracked(path: str) -> None:
     assert not _ignored(path), f"{path} が .gitignore で除外されている"
 
 
+@pytest.mark.parametrize("path", ["data/train.csv", "input/test.parquet"])
+def test_competition_data_is_ignored(path: str) -> None:
+    """コンペから受け取ったデータは規約でほぼ確実に再配布禁止。追跡させない。"""
+    assert _ignored(path), f"{path} が .gitignore で除外されていない"
+
+
 @pytest.mark.parametrize("path", [
-    "data/train.csv",
-    "input/test.parquet",
-    "output/oof.npy",
-    "submissions/sub.csv",
     "models/lgb.pkl",
     "experiments/exp0001/artifacts/oof.npy",
     "checkpoint.pt",
     "features.feather",
     "wandb/run-1/logs",
 ])
-def test_data_and_weights_are_ignored(path: str) -> None:
-    """コンペのデータは規約でほぼ確実に再配布禁止。追跡させない。"""
+def test_heavy_artifacts_are_ignored(path: str) -> None:
+    """規約ではなく大きさの問題。履歴が肥大化して clone が重くなる。"""
     assert _ignored(path), f"{path} が .gitignore で除外されていない"
+
+
+@pytest.mark.parametrize("path", ["submissions/exp0007.csv", "output/oof.npy"])
+def test_own_outputs_are_ignored_by_default(path: str) -> None:
+    """既定では除外するが、理由は再配布禁止ではない。
+
+    提出物はコンペのデータではなく自分の予測。開催中の公開リポジトリに置くと
+    「チーム外への共有」に当たりうるため、可視性が分からない側で安全に倒している。
+    private なリポジトリなら外してよい、と .gitignore と README に書いてある。
+    """
+    assert _ignored(path), f"{path} が .gitignore で除外されていない"
+
+
+def test_gitignore_explains_why_outputs_are_excluded() -> None:
+    """理由を書いておかないと、再配布禁止と混同されて外せなくなる。"""
+    text = (ROOT / ".gitignore").read_text(encoding="utf-8")
+    assert "再配布禁止の対象ではない" in text
+    assert "private なリポジトリなら" in text
 
 
 class TestPrePushHook:

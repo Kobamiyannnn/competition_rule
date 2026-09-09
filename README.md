@@ -147,7 +147,7 @@ phase は `p0_recon` → `p1_survey` → `p2_saturate` → `p3_ideas` の順に�
 pyproject.toml             依存とコマンド定義。uv add でコンペのライブラリを足す
 uv.lock                    依存の固定。コミットする（再現性の土台）
 .python-version            Python の版の固定
-competition.yaml           コンペ定義。指標・ノイズ幅・phase・policy
+competition.yaml           コンペ定義。指標・提出形式・ノイズ幅・phase・policy
 lint.yaml                  語彙規則と字数上限の上書き（任意）
 CLAUDE.md                  /init-competition が生成する作業規範
 
@@ -174,7 +174,7 @@ tools/
   hooks/                   記録の lint 強制、metrics.json 保護、引き継ぎ注入
   githooks/pre-push        テンプレートへの誤プッシュ防止
   bootstrap.sh             clone 直後の git 付け替え
-  tests/                   228件
+  tests/                   240件
 templates/                 実験スクリプトと CLAUDE.md の雛形
 ```
 
@@ -192,10 +192,28 @@ templates/                 実験スクリプトと CLAUDE.md の雛形
 
 ## 気をつけること
 
-**データをコミットしない。** コンペのデータは規約でほぼ確実に再配布禁止。
-`.gitignore` で `data/` `input/` `output/` `submissions/` と `*.csv` `*.parquet`
-`*.pkl` `*.pt` などを除外してある。取得元と展開手順は
+**コンペから受け取ったデータはコミットしない。** 規約でほぼ確実に再配布禁止。
+`data/` と `input/` を `.gitignore` で除外してある。取得元と展開手順は
 `knowledge/operations.md` に書き、データそのものは置かない。
+
+**提出物は `submissions/<実験ID>.csv` に置く。** `expctl lb exp0007 --public 0.8734`
+がその名前でファイルを探し、sha256 と行数を `metrics.json` に記録する。
+Code Competition のようにノートブックが実行される形式なら
+`competition.yaml` の `submission.kind` を `notebook` にすると探さなくなる。
+
+`submissions/` も既定では `.gitignore` に入れてあるが、**理由は再配布禁止ではない。**
+提出物はあなたの予測であって、コンペのデータではない。除外しているのは、
+開催中の公開リポジトリに置くと多くのコンペで禁止されている「チーム外への共有」に
+当たりうるからで、リポジトリの可視性はテンプレート側から判別できないため
+安全側に倒してある。**private なリポジトリなら `.gitignore` から外してよい。**
+そうすれば同じ提出を実験の回し直しなしで再現できる。
+
+外さない場合も、指紋が残っているので「手元のファイルが当時のものか」は照合できる。
+
+**記録は除外されない。** `record.yaml` / `metrics.json` / `decisions/` /
+`knowledge/` / `feedback/` / `uv.lock` はそのままコミットされる。
+`*.csv` を一括で除外しているので、自分で書いた小さな対照表などを追跡したいときは
+`git add -f` で個別に足す。
 
 **抜け道は記録に残る。** 語彙規則は `lint_waived`（規則名と20字以上の理由）、
 ゲートは `--force`（押し切った内容が `record.yaml` に残る）で抜けられる。
