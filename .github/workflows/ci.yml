@@ -89,4 +89,6 @@ jobs:
             '{"hook_event_name":"PreToolUse","tool_input":{"file_path":"'"$PWD"'/src/train.py"}}')" = 0
           test "$(run_hook tools/hooks/session.py \
             '{"hook_event_name":"SessionStart","source":"startup","cwd":"'"$PWD"'"}')" = 0
+          test "$(run_hook tools/hooks/stop.py \
+            '{"hook_event_name":"Stop","stop_hook_active":false,"cwd":"'"$PWD"'"}')" = 0
           echo "ok: hook の終了コードは期待どおり"

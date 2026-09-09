@@ -139,6 +139,7 @@ def base_record(exp_id: str, **over: object) -> dict:
     doc: dict = {
         "id": exp_id,
         "created_at": "2026-09-07T12:00:00+09:00",
+        "created_by": "expctl new",
         "tier": "exploit",
         "based_on": None,
         "axes": ["features"],

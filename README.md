@@ -167,14 +167,14 @@ knowledge/
   priors/                  種別別の実績ある打ち手（汎用）
 reports/
   conclusion.md            人が書く唯一の欄。600字、lint あり
-  report.md                expctl report が生成。手で編集しない
+  report.md                expctl report が生成。手で編集しない（コミットはする）
 
 tools/
   expkit/                  lint・ゲート・状態集計・引き継ぎ・レポート生成（uv run expctl）
   hooks/                   記録の lint 強制、metrics.json 保護、引き継ぎ注入
   githooks/pre-push        テンプレートへの誤プッシュ防止
   bootstrap.sh             clone 直後の git 付け替え
-  tests/                   240件
+  tests/                   248件
 templates/                 実験スクリプトと CLAUDE.md の雛形
 ```
 
@@ -215,9 +215,14 @@ Code Competition のようにノートブックが実行される形式なら
 `*.csv` を一括で除外しているので、自分で書いた小さな対照表などを追跡したいときは
 `git add -f` で個別に足す。
 
-**抜け道は記録に残る。** 語彙規則は `lint_waived`（規則名と20字以上の理由）、
-ゲートは `--force`（押し切った内容が `record.yaml` に残る）で抜けられる。
-反証条件・改竄検知・スキーマ・参照解決の4つは抜けられない。
+**抜け道は記録に残る。** 語彙規則は `lint_waived`、ゲートは `--force --reason` で抜けられる。
+**どちらも20字以上の理由が要る。** 反証条件・改竄検知・スキーマ・参照解決の
+4つは抜けられない。
+
+規範の強制は「迂回を不可能にする」ものではなく、**迂回を明示的な行為にする**もの。
+Bash で書いた記録もターン終了時の Stop hook で検査され、手で作った実験は
+`created_by` が無いことで落ちる。決意した相手は止められないが、
+うっかりと手抜きは止まる。詳しくは [`docs/design.md`](docs/design.md)。
 
 **基盤が邪魔をしたら記録する。** ゲートを `--force` で押し切った、`lint_waived` を
 使った、記録したいことに置き場所が無かった — そういう場面は

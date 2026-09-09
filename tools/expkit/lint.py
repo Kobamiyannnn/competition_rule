@@ -280,6 +280,8 @@ def lint_record(
 
     _lint_prose(doc, "record", cfg, report)
     _lint_waivers(doc, report)
+    _lint_forced_gates(doc, report)
+    _lint_created_by(doc, report)
     return report
 
 
@@ -399,6 +401,50 @@ def _lint_metrics_link(doc: dict, exp_id: str, root: Path | None, report: Report
     if (mdoc.get("git") or {}).get("dirty"):
         report.add(rule="repro.dirty_worktree", severity="warn", field="metrics.json",
                    message="コミットされていない変更がある状態で実験が回っている。再現できない。")
+
+
+def _lint_created_by(doc: dict, report: Report) -> None:
+    """`expctl new` を通って作られた実験かを確かめる。
+
+    ディレクトリを手で作って record.yaml を置けば、tier クォータも
+    地固めのゲートも在庫の下限も一度も評価されない。
+    この欄が無いと、迂回が「書き忘れ」と見分けられない。
+    書けば通ってしまう程度の印だが、迂回が省略ではなく明示的な行為になる。
+    """
+    if not str(doc.get("created_by") or "").strip():
+        report.add(
+            rule="schema.missing", severity="error", field="created_by",
+            message="`uv run expctl new` を通っていない。"
+                    " 手で作るとゲート（tier 配分・地固め・在庫の下限）が"
+                    " 一度も評価されない。expctl new で作り直す。",
+        )
+
+
+def _lint_forced_gates(doc: dict, report: Report) -> None:
+    """ゲートを押し切ったなら、なぜ押し切ったのかを書かせる。
+
+    語彙規則の waive には20字以上の理由を要求しているのに、
+    ゲートの押し切りには何も要求していなかった。抜け道の重さが逆で、
+    影響の大きい方が緩いままだった。
+    """
+    for i, g in enumerate(doc.get("gates_forced") or []):
+        where = f"gates_forced[{i}]"
+        if not isinstance(g, dict):
+            report.add(rule="schema.type", severity="error", field=where,
+                       message="gates_forced の要素はマッピング。")
+            continue
+        if not str(g.get("gate") or "").strip():
+            report.add(rule="schema.missing", severity="error", field=f"{where}.gate",
+                       message="どのゲートを押し切ったのか書く。")
+        reason = str(g.get("reason") or "").strip()
+        if len(reason) < 20:
+            report.add(
+                rule="force.thin_reason", severity="error", field=f"{where}.reason",
+                message="押し切った理由が20字未満。"
+                        " ゲートは実験の方向そのものを止めているので、"
+                        " 語彙規則を抜けるより重い判断になる。"
+                        " 基盤の側に問題があるなら `uv run expctl propose` にも残す。",
+            )
 
 
 def _lint_waivers(doc: dict, report: Report) -> None:

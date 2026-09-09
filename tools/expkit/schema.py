@@ -31,7 +31,7 @@ DEFAULT_AXES = (
 )
 
 RECORD_FIELDS = {
-    "required": ("id", "created_at", "tier", "change", "observation"),
+    "required": ("id", "created_at", "created_by", "tier", "change", "observation"),
     "optional": (
         "based_on", "decision", "idea", "axes", "hypothesis", "lint_waived", "notes",
     ),
@@ -107,6 +107,8 @@ def record_template(exp_id: str, created_at: str) -> str:
 # 字数上限と語彙規則がかかる。`expctl lint {exp_id}` で確認する。
 id: {exp_id}
 created_at: {created_at}
+# `expctl new` が書く。手で作った実験はゲートを一度も通っていないので lint が落とす。
+created_by: expctl new
 
 # exploit=既存の勝ち筋の改良 / explore=未検証の方向 / moonshot=外れる確率が高いが当たれば大きい
 tier: explore

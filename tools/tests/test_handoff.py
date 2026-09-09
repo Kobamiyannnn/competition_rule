@@ -121,3 +121,64 @@ class TestDoctor:
                              capture_output=True, text=True, timeout=300)
         assert out.returncode == 0, out.stdout
         assert "使える状態になっている" in out.stdout
+
+
+class TestStopHook:
+    """ターンの終わりの検査。
+
+    PostToolUse は Write / Edit にしか掛からないので、Bash のヒアドキュメントで
+    書いた記録は素通りする。書き方によらず捕まえるのがこの hook の役目。
+    """
+
+    HOOK = ROOT / "tools" / "hooks" / "stop.py"
+
+    def _run(self, work: Path, *, active: bool) -> subprocess.CompletedProcess:
+        import json
+
+        payload = json.dumps({
+            "hook_event_name": "Stop", "stop_hook_active": active, "cwd": str(work),
+        })
+        return subprocess.run(
+            ["python3", str(self.HOOK)], input=payload,
+            cwd=work, capture_output=True, text=True, timeout=300,
+        )
+
+    @pytest.fixture()
+    def with_bad_record(self, cloned: Path) -> Path:
+        """Write ツールを使わずに置かれた、規範違反の記録。"""
+        exp = cloned / "experiments" / "exp0001"
+        exp.mkdir(parents=True, exist_ok=True)
+        (exp / "record.yaml").write_text(
+            "id: exp0001\n"
+            "created_at: 2026-09-09T10:00:00+09:00\n"
+            "tier: explore\n"
+            "based_on: null\n"
+            "axes: [features]\n"
+            "change:\n  summary: |\n    集約特徴を追加した。かなり効いたと思われる。\n"
+            "observation: |\n  CV が 0.87 まで大幅に改善。\n"
+            "hypothesis: []\n"
+            "lint_waived: []\n",
+            encoding="utf-8",
+        )
+        return cloned
+
+    def test_blocks_records_written_outside_the_editor(self, with_bad_record: Path) -> None:
+        out = self._run(with_bad_record, active=False)
+        assert out.returncode == 2
+        assert "vocab.hedge" in out.stderr
+        assert "created_by" in out.stderr
+
+    def test_does_not_block_twice(self, with_bad_record: Path) -> None:
+        """直せない指摘で無限に止まると、規範ごと外されることになる。"""
+        assert self._run(with_bad_record, active=True).returncode == 0
+
+    def test_silent_on_a_clean_repository(self, cloned: Path) -> None:
+        out = self._run(cloned, active=False)
+        assert out.returncode == 0
+
+    def test_silent_before_initialization(self, cloned: Path) -> None:
+        text = (cloned / "competition.yaml").read_text(encoding="utf-8")
+        (cloned / "competition.yaml").write_text(
+            text.replace("name: テストコンペ", "name: TODO"), encoding="utf-8")
+        out = self._run(cloned, active=False)
+        assert out.returncode == 0 and not out.stderr.strip()

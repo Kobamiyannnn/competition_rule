@@ -155,6 +155,8 @@ def cmd_new(args: argparse.Namespace) -> int:
                 forced.append(f"  - gate: {f.gate}")
                 forced.append("    message: |")
                 forced.append(f"      {msg}")
+                forced.append("    reason: |")
+                forced.append(f"      {args.reason or 'TODO: なぜ押し切ったのかを20字以上で書く'}")
         text += "\n".join(forced) + "\n"
 
     path.write_text(text, encoding="utf-8")
@@ -258,6 +260,15 @@ def cmd_lint(args: argparse.Namespace) -> int:
             e = next((x for x in state.experiments if x.id == t), None)
             if e:
                 lint_one_experiment(e)
+                continue
+            if t == "records":
+                # 実験と決定だけ。台帳（landscape / domain / backlog）は
+                # それぞれのゲートが進行を止めるので、未記入でも害が出ない。
+                for e in state.experiments:
+                    lint_one_experiment(e)
+                if decisions_dir(root).exists():
+                    for f in sorted(decisions_dir(root).glob("*.yaml")):
+                        lint_one_decision(_load_yaml(f), f.stem)
                 continue
             if t in ("backlog", "ideas"):
                 lint_the_backlog()
@@ -961,10 +972,14 @@ def build_parser() -> argparse.ArgumentParser:
     n.add_argument("--idea", default=None)
     n.add_argument("--id", default=None)
     n.add_argument("--force", action="store_true", help="ゲートを押し切る")
+    n.add_argument("--reason", default=None,
+                   help="--force のとき、なぜ押し切るのか（20字以上。lint が要求する）")
     n.set_defaults(func=cmd_new)
 
     l = sub.add_parser("lint", help="記録と決定を検査する")
-    l.add_argument("targets", nargs="*", help="実験ID / 決定ID / ファイルパス。省略で全件")
+    l.add_argument("targets", nargs="*",
+                   help="実験ID / 決定ID / ファイルパス / records / backlog / landscape / "
+                        "domain / proposals。省略で全件")
     l.add_argument("-v", "--verbose", action="store_true")
     l.set_defaults(func=cmd_lint)
 
