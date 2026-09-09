@@ -662,6 +662,71 @@ def _mark_idea(root: Path, idea_id: str, *, status: str, experiment: str | None)
             return
 
 
+def cmd_doctor(args: argparse.Namespace) -> int:
+    """この端末が使える状態になっているかを確かめる。
+
+    別の端末で clone したときに何が足りないかを1つずつ出す。
+    記録は git で運べるが、端末ごとの設定は運べない。
+    """
+    import shutil
+    import subprocess
+
+    root = repo_root()
+    problems: list[tuple[str, str]] = []
+    ok: list[str] = []
+
+    if shutil.which("uv") is None:
+        problems.append((
+            "uv が入っていない",
+            "curl -LsSf https://astral.sh/uv/install.sh | sh",
+        ))
+    else:
+        ok.append("uv が入っている")
+
+    # git の hooksPath はローカル設定なので clone しても引き継がれない。
+    # ここが空だと、テンプレートへの誤プッシュを止めるガードが黙って無効になる。
+    hooks_path = ""
+    try:
+        out = subprocess.run(["git", "config", "core.hooksPath"],
+                             cwd=root, capture_output=True, text=True, timeout=10)
+        hooks_path = out.stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        pass
+    if hooks_path != "tools/githooks":
+        problems.append((
+            "pre-push hook が無効（テンプレートへの誤プッシュを止められない）",
+            "git config core.hooksPath tools/githooks",
+        ))
+    else:
+        ok.append("pre-push hook が有効")
+
+    if not (root / ".venv").exists():
+        problems.append(("依存が入っていない", "uv sync"))
+    else:
+        ok.append("依存が入っている")
+
+    if not (root / "data").exists():
+        problems.append((
+            "data/ が無い（コンペのデータは git で運ばない）",
+            "knowledge/operations.md の取得手順を見る",
+        ))
+    else:
+        ok.append("data/ がある")
+
+    for line in ok:
+        print(f"  ok   {line}")
+    if not problems:
+        print("\nこの端末は使える状態になっている。")
+        return 0
+
+    print()
+    for what, how in problems:
+        print(f"{BOLD}  要対応{RESET} {what}")
+        print(f"         → {how}")
+    print("\nまとめて直すなら: bash tools/bootstrap.sh")
+    return 1
+
+
 def _proposals_path(root: Path) -> Path:
     return root / "feedback" / "proposals.yaml"
 
@@ -927,6 +992,9 @@ def build_parser() -> argparse.ArgumentParser:
     lc = lsub.add_parser("check", help="出典の URL が実在するかを確かめる")
     lc.add_argument("--timeout", type=float, default=10.0)
     lc.set_defaults(func=cmd_landscape_check)
+
+    dr = sub.add_parser("doctor", help="この端末が使える状態か確かめる")
+    dr.set_defaults(func=cmd_doctor)
 
     pr = sub.add_parser("propose", help="基盤そのものへの改善提案を残す")
     pr.add_argument("--kind", required=True,

@@ -60,6 +60,26 @@ git remote add origin <自分のリポジトリ>   # private を推奨
 
 履歴ごと捨てるなら `--fresh`（テンプレートの更新は取り込めなくなる）。
 
+### 別の端末で続きをやる
+
+**記録は git で運べるが、端末ごとの設定は運べない。** clone しただけでは
+`core.hooksPath` が空のままで、テンプレートへの誤プッシュを止めるガードが無効になる。
+
+```bash
+git clone <自分のコンペリポジトリ> && cd <それ>
+bash tools/bootstrap.sh        # hooksPath の設定と uv sync
+```
+
+`bootstrap.sh` は origin がテンプレートを指していないことを見て、
+改名は飛ばし、設定と依存の導入だけをやる。
+
+足りないものは `uv run expctl doctor` でいつでも確認できる。
+Claude Code を開いたときも、設定が足りなければ引き継ぎの冒頭で警告が出る。
+
+データ（`data/`）は git に入らないので、`knowledge/operations.md` の
+取得手順を見て入れ直す。摩擦の記録（`.expkit/`）も端末ごとなので、
+`expctl feedback` はその端末で起きた分しか集計しない。
+
 ### 立ち上げる
 
 ```bash
@@ -104,6 +124,7 @@ phase は `p0_recon` → `p1_survey` → `p2_saturate` → `p3_ideas` の順に�
 
 | コマンド | 用途 |
 |---|---|
+| `expctl doctor` | この端末が使える状態か確かめる（別の端末で clone した直後に） |
 | `expctl status` | phase・地固め・網羅・CV信頼性・tier配分・較正・消極性 |
 | `expctl brief` | 引き継ぎ。セッション開始時に hook が自動で走らせる |
 | `expctl new` | 実験を立てる（ゲート判定を通してから） |
@@ -153,7 +174,7 @@ tools/
   hooks/                   記録の lint 強制、metrics.json 保護、引き継ぎ注入
   githooks/pre-push        テンプレートへの誤プッシュ防止
   bootstrap.sh             clone 直後の git 付け替え
-  tests/                   211件
+  tests/                   228件
 templates/                 実験スクリプトと CLAUDE.md の雛形
 ```
 

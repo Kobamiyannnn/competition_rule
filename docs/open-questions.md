@@ -149,6 +149,17 @@ SessionStart hook は `competition.yaml` の `name` が `TODO` のとき黙る
 このファイルがその代わり。フレームワークを触るときは、
 未決の判断をここに書き足してからセッションを閉じる。
 
+### 摩擦の記録が端末ごとに分かれる
+
+`.expkit/events.jsonl` は `.gitignore` で除外してある。実験の記録と混ぜたくない
+ためだが、その結果 `expctl feedback` は**その端末で起きた摩擦しか集計しない**。
+
+複数の端末でコンペを回すと、ゲートが止めた回数が実際より少なく見える。
+waive と `gates_forced` は記録に入るので、そちらは全部集まる。
+
+**塞ぐなら**: `.expkit/events.jsonl` をコミット対象にする。ただし実験と無関係の行が
+git の履歴に混ざる。1コンペ回して、端末をまたぐ頻度を見てから決める。
+
 ### 出典の捏造を完全には防げない
 
 `landscape.yaml` は URL を必須にし、`expctl landscape check` で
